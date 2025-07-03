@@ -1,0 +1,17 @@
+it.col.mar.android.carkarma
+│
+├── data              // Database, repository, data source
+│   ├── model         // Classi dei dati (Amico, Gruppo, Uscita)
+│   ├── database      // Room Database e Dao
+│
+├── domain            // Logica di business, use case, algoritmo di calcolo
+│
+├── presentation      // Activity, Fragment, Adapter, ViewModel
+│   ├── home
+│   ├── gruppo
+│   ├── uscita
+│   ├── calcolo
+│
+├── util              // Funzioni di utilità, estensioni, costanti
+│
+└── App.kt            // Classe Application se ti serve
