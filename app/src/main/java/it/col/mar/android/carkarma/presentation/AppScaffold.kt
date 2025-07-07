@@ -15,7 +15,7 @@ import it.col.mar.android.carkarma.R
 @Composable
 fun AppScaffold(
     navController: NavController,
-    title: String = stringResource(R.string.carkarma),
+    title: String = stringResource(R.string.app_name),
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(
