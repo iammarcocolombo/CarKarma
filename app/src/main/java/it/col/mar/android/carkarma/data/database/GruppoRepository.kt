@@ -25,4 +25,8 @@ class GruppoRepository {
     fun rimuoviGruppo(gruppo: Gruppo) {
         gruppi.remove(gruppo)
     }
+
+    fun getGruppoPerId(id: Int): Gruppo? {
+        return gruppi.find { it.id == id }
+    }
 }

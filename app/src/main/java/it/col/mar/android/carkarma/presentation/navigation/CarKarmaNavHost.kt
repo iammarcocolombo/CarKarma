@@ -22,7 +22,15 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
         modifier = Modifier.padding(paddingValues)
     ) {
         composable("home") { HomeScreen(navController) }
-        composable("gruppo") { GruppoScreen(navController) }
+
+        composable(
+            "gruppo/{gruppoId}"
+        ) { backStackEntry ->
+            val gruppoId = backStackEntry.arguments?.getString("gruppoId")?.toIntOrNull() ?: -1
+            GruppoScreen(navController, gruppoId)
+        }
+
+
         composable("modificaGruppo") { ModificaGruppoScreen(navController) }
         composable("nuovaUscita") { NuovaUscitaScreen(navController) }
         composable("calcolo") { CalcoloScreen(navController) }

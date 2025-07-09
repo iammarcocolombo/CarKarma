@@ -38,7 +38,7 @@ fun HomeScreen(
 
         LazyColumn {
             items(gruppi) { gruppo ->
-                GruppoCard(gruppo = gruppo, onClick = { navController.navigate("gruppo") })
+                GruppoCard(gruppo = gruppo, onClick = { navController.navigate("gruppo/${gruppo.id}")})
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
