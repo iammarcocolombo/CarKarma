@@ -8,8 +8,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import it.col.mar.android.carkarma.presentation.calcolo.CalcoloScreen
-import it.col.mar.android.carkarma.presentation.gruppo.DettaglioGruppoScreen
-import it.col.mar.android.carkarma.presentation.gruppo.GruppiScreen
+import it.col.mar.android.carkarma.presentation.gruppo.ModificaGruppoScreen
+import it.col.mar.android.carkarma.presentation.gruppo.GruppoScreen
 import it.col.mar.android.carkarma.presentation.home.HomeScreen
 import it.col.mar.android.carkarma.presentation.uscita.NuovaUscitaScreen
 
@@ -22,8 +22,8 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
         modifier = Modifier.padding(paddingValues)
     ) {
         composable("home") { HomeScreen(navController) }
-        composable("gruppi") { GruppiScreen(navController) }
-        composable("dettaglioGruppo") { DettaglioGruppoScreen(navController) }
+        composable("gruppo") { GruppoScreen(navController) }
+        composable("modificaGruppo") { ModificaGruppoScreen(navController) }
         composable("nuovaUscita") { NuovaUscitaScreen(navController) }
         composable("calcolo") { CalcoloScreen(navController) }
     }

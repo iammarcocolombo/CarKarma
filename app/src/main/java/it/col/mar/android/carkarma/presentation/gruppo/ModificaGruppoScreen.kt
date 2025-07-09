@@ -9,10 +9,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import it.col.mar.android.carkarma.presentation.home.HomeScreen
 
 @Composable
-fun DettaglioGruppoScreen(navController: NavController) {
+fun ModificaGruppoScreen(navController: NavController) {
     Column (
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
@@ -36,7 +35,7 @@ fun DettaglioGruppoScreen(navController: NavController) {
 
 @Preview(showBackground = true)
 @Composable
-fun DettaglioGruppoScreenPreview() {
+fun ModificaGruppoScreenPreview() {
     val navController = rememberNavController()
-    DettaglioGruppoScreen(navController)
+    ModificaGruppoScreen(navController)
 }
