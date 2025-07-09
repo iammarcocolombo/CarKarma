@@ -6,30 +6,39 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
-import it.col.mar.android.carkarma.data.database.GruppoRepository
-import it.col.mar.android.carkarma.data.database.UscitaRepository
-import it.col.mar.android.carkarma.data.model.Uscita
 
 @Composable
-fun GruppoScreen(navController: NavController, gruppoId: Int) {
-    val gruppoRepository = remember { GruppoRepository() }
-    val uscitaRepository = remember { UscitaRepository() }
+fun GruppoScreen(
+    navController: NavController,
+    gruppoId: Int,
+    viewModel: GruppoViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+) {
+    LaunchedEffect(gruppoId) {
+        viewModel.loadGruppo(gruppoId)
+    }
 
-    val gruppo = remember { gruppoRepository.getGruppoPerId(gruppoId) }
-    val uscite = remember { uscitaRepository.getUscitePerGruppo(gruppoId) }
+    val gruppo by viewModel.gruppo.collectAsState()
+    val uscite by viewModel.uscite.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
 
-    if (gruppo == null) {
-        Text("Gruppo non trovato", modifier = Modifier.padding(16.dp))
+    if (errorMessage != null) {
+        Text(
+            text = errorMessage ?: "",
+            modifier = Modifier.padding(16.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error
+        )
         return
     }
-    if (gruppoId == -1) {
-        Text("ID gruppo non valido", modifier = Modifier.padding(16.dp))
+
+    if (gruppo == null) {
+        // Se il gruppo non è ancora caricato, puoi mostrare un loader o placeholder
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+            CircularProgressIndicator()
+        }
         return
     }
 
@@ -38,18 +47,18 @@ fun GruppoScreen(navController: NavController, gruppoId: Int) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Titolo gruppo e numero componenti
         Text(
-            text = gruppo.nome,
-            style = MaterialTheme.typography.headlineMedium
+            text = gruppo!!.nome,
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onBackground
         )
         Text(
-            text = "${gruppo.amici.size} componenti",
+            text = "${gruppo!!.amici.size} componenti",
             style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        // Lista uscite
         LazyColumn(
             modifier = Modifier.weight(1f)
         ) {
@@ -61,64 +70,43 @@ fun GruppoScreen(navController: NavController, gruppoId: Int) {
             }
         }
 
-        // Bottone nuova uscita
         Button(
             onClick = { navController.navigate("nuovaUscita") },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 16.dp)
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
-            Text("Nuova Uscita")
+            Text(
+                "Nuova Uscita",
+                color = MaterialTheme.colorScheme.onPrimary
+            )
         }
     }
 }
 
 @Composable
-fun UscitaCard(uscita: Uscita, onClick: () -> Unit) {
+fun UscitaCard(uscita: it.col.mar.android.carkarma.data.model.Uscita, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = uscita.nome,
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = "Km totali: ${uscita.kmTotali}",
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
-}
-
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-fun GruppoScreenPreview() {
-    val navController = rememberNavController()
-
-    // Mock di repository di test
-    val gruppoRepository = GruppoRepository()
-    val uscitaRepository = UscitaRepository()
-
-    // Aggiungiamo dati di test per essere sicuri che il gruppo con id 1 esista
-    val gruppoId = 1
-
-    // Serve perché nelle preview i remember non mantengono stato tra recomposition
-    LaunchedEffect(Unit) {
-        if (gruppoRepository.getGruppoPerId(gruppoId) == null) {
-            gruppoRepository.aggiungiGruppo(
-                it.col.mar.android.carkarma.data.model.Gruppo(
-                    id = gruppoId,
-                    nome = "Amici",
-                    amici = listOf()
-                )
-            )
-        }
-    }
-
-    GruppoScreen(navController = navController, gruppoId = gruppoId)
 }

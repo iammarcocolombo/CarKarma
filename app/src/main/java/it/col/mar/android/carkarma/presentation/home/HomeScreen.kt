@@ -1,5 +1,6 @@
 package it.col.mar.android.carkarma.presentation.home
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -7,16 +8,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.rememberNavController
-import it.col.mar.android.carkarma.data.model.Amico
-import it.col.mar.android.carkarma.data.model.Gruppo
-import it.col.mar.android.carkarma.ui.theme.CarKarmaTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
-
+import androidx.navigation.NavHostController
+import it.col.mar.android.carkarma.data.model.Gruppo
 
 @Composable
 fun HomeScreen(
@@ -30,52 +27,84 @@ fun HomeScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        // Titolo centrato
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            Text(
+                text = "Benvenuto su CarKarma",
+                style = MaterialTheme.typography.headlineLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
+
+        // Titolo più piccolo e centrato
         Text(
             text = "I tuoi Gruppi",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 8.dp)
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(bottom = 8.dp)
         )
 
-        LazyColumn {
+        LazyColumn(
+            modifier = Modifier.weight(1f)
+        ) {
             items(gruppi) { gruppo ->
-                GruppoCard(gruppo = gruppo, onClick = { navController.navigate("gruppo/${gruppo.id}")})
+                GruppoCard(gruppo = gruppo, onClick = { navController.navigate("gruppo/${gruppo.id}") })
                 Spacer(modifier = Modifier.height(8.dp))
             }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = { navController.navigate("modificaGruppo") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
+        ) {
+            Text(
+                text = "Crea nuovo gruppo",
+                style = MaterialTheme.typography.labelLarge
+            )
         }
     }
 }
 
-
-@Preview(showBackground = true, showSystemUi = true)
 @Composable
-fun HomeScreenPreview() {
-    val navController = rememberNavController()
-
-    // Gruppi di test solo per preview
-    val gruppiDiTest = listOf(
-        Gruppo(1, "Amici", emptyList()),
-        Gruppo(2, "Famiglia", emptyList()),
-        Gruppo(3, "Colleghi", emptyList())
-    )
-
-    CarKarmaTheme {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
+fun GruppoCard(
+    gruppo: Gruppo,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "I tuoi Gruppi",
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(bottom = 8.dp)
+                text = gruppo.nome,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
             )
-
-            LazyColumn {
-                items(gruppiDiTest) { gruppo ->
-                    GruppoCard(gruppo = gruppo, onClick = {})
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-            }
+            Text(
+                text = "${gruppo.amici.size} amici",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

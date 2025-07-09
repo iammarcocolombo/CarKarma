@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import it.col.mar.android.carkarma.presentation.calcolo.CalcoloScreen
 import it.col.mar.android.carkarma.presentation.gruppo.ModificaGruppoScreen
 import it.col.mar.android.carkarma.presentation.gruppo.GruppoScreen
@@ -24,9 +26,10 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
         composable("home") { HomeScreen(navController) }
 
         composable(
-            "gruppo/{gruppoId}"
+            route = "gruppo/{gruppoId}",
+            arguments = listOf(navArgument("gruppoId") { type = NavType.IntType })
         ) { backStackEntry ->
-            val gruppoId = backStackEntry.arguments?.getString("gruppoId")?.toIntOrNull() ?: -1
+            val gruppoId = backStackEntry.arguments?.getInt("gruppoId") ?: -1
             GruppoScreen(navController, gruppoId)
         }
 

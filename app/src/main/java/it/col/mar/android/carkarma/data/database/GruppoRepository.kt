@@ -3,17 +3,18 @@ package it.col.mar.android.carkarma.data.database
 import it.col.mar.android.carkarma.data.model.Gruppo
 import it.col.mar.android.carkarma.data.model.Amico
 
-class GruppoRepository {
+class GruppoRepository(private val amicoRepository: AmicoRepository) {
 
     private val gruppi = mutableListOf<Gruppo>()
 
     init {
-        // Gruppi di esempio all'avvio
-        val amico1 = Amico(1, "Marco", 2, 5, 3, 300)
-        val amico2 = Amico(2, "Luca", 1, 3, 2, 200)
-        val gruppo = Gruppo(1, "Amici", listOf(amico1, amico2))
+        val amici = amicoRepository.getTuttiGliAmici()
 
-        gruppi.add(gruppo)
+        val gruppo1 = Gruppo(1, "Gruppo Completo", amici) // tutti e 3
+        val gruppo2 = Gruppo(2, "Gruppo Marco e Luca", amici.filter { it.id == 1 || it.id == 2 })
+        val gruppo3 = Gruppo(3, "Gruppo Luca e Giulia", amici.filter { it.id == 2 || it.id == 3 })
+
+        gruppi.addAll(listOf(gruppo1, gruppo2, gruppo3))
     }
 
     fun getTuttiIGruppi(): List<Gruppo> = gruppi
