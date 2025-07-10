@@ -33,10 +33,3 @@ fun NuovaUscitaScreen(navController: NavController) {
         }
     }
 }
-
-@Preview(showBackground = true)
-@Composable
-fun NuovaUscitaScreenPreview() {
-    val navController = rememberNavController()
-    NuovaUscitaScreen(navController)
-}

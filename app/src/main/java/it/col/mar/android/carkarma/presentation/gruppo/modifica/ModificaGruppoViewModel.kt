@@ -1,4 +1,4 @@
-package it.col.mar.android.carkarma.presentation.gruppo
+package it.col.mar.android.carkarma.presentation.gruppo.modifica
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

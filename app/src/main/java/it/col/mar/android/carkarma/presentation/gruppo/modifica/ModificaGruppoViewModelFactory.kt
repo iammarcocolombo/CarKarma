@@ -1,9 +1,8 @@
-package it.col.mar.android.carkarma.presentation.gruppo
+package it.col.mar.android.carkarma.presentation.gruppo.modifica
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import it.col.mar.android.carkarma.data.database.AmicoRepository
-import it.col.mar.android.carkarma.data.database.AppContainer
 import it.col.mar.android.carkarma.data.database.GruppoRepository
 
 

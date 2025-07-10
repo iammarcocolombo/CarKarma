@@ -3,7 +3,6 @@ package it.col.mar.android.carkarma.presentation.navigation
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -11,16 +10,14 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import it.col.mar.android.carkarma.data.database.AmicoRepository
 import it.col.mar.android.carkarma.data.database.AppContainer
-import it.col.mar.android.carkarma.data.database.GruppoRepository
 import it.col.mar.android.carkarma.presentation.calcolo.CalcoloScreen
-import it.col.mar.android.carkarma.presentation.gruppo.ModificaGruppoScreen
 import it.col.mar.android.carkarma.presentation.gruppo.GruppoScreen
 import it.col.mar.android.carkarma.presentation.gruppo.GruppoViewModel
 import it.col.mar.android.carkarma.presentation.gruppo.GruppoViewModelFactory
-import it.col.mar.android.carkarma.presentation.gruppo.ModificaGruppoViewModel
-import it.col.mar.android.carkarma.presentation.gruppo.ModificaGruppoViewModelFactory
+import it.col.mar.android.carkarma.presentation.gruppo.modifica.ModificaGruppoScreen
+import it.col.mar.android.carkarma.presentation.gruppo.modifica.ModificaGruppoViewModel
+import it.col.mar.android.carkarma.presentation.gruppo.modifica.ModificaGruppoViewModelFactory
 import it.col.mar.android.carkarma.presentation.home.HomeScreen
 import it.col.mar.android.carkarma.presentation.uscita.NuovaUscitaScreen
 
