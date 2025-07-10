@@ -3,15 +3,24 @@ package it.col.mar.android.carkarma.presentation.navigation
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import it.col.mar.android.carkarma.data.database.AmicoRepository
+import it.col.mar.android.carkarma.data.database.AppContainer
+import it.col.mar.android.carkarma.data.database.GruppoRepository
 import it.col.mar.android.carkarma.presentation.calcolo.CalcoloScreen
 import it.col.mar.android.carkarma.presentation.gruppo.ModificaGruppoScreen
 import it.col.mar.android.carkarma.presentation.gruppo.GruppoScreen
+import it.col.mar.android.carkarma.presentation.gruppo.GruppoViewModel
+import it.col.mar.android.carkarma.presentation.gruppo.GruppoViewModelFactory
+import it.col.mar.android.carkarma.presentation.gruppo.ModificaGruppoViewModel
+import it.col.mar.android.carkarma.presentation.gruppo.ModificaGruppoViewModelFactory
 import it.col.mar.android.carkarma.presentation.home.HomeScreen
 import it.col.mar.android.carkarma.presentation.uscita.NuovaUscitaScreen
 
@@ -30,11 +39,45 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
             arguments = listOf(navArgument("gruppoId") { type = NavType.IntType })
         ) { backStackEntry ->
             val gruppoId = backStackEntry.arguments?.getInt("gruppoId") ?: -1
-            GruppoScreen(navController, gruppoId)
+
+            val viewModel: GruppoViewModel = viewModel(
+                factory = GruppoViewModelFactory(
+                    AppContainer.amicoRepository,
+                    AppContainer.gruppoRepository,
+                    AppContainer.uscitaRepository
+                )
+            )
+
+            GruppoScreen(
+                navController = navController,
+                gruppoId = gruppoId,
+                viewModel = viewModel
+            )
         }
 
+        composable(
+            "modificaGruppo/{gruppoId}",
+            arguments = listOf(navArgument("gruppoId") {
+                type = NavType.IntType
+                defaultValue = -1
+            })
+        ) { backStackEntry ->
+            val gruppoId = backStackEntry.arguments?.getInt("gruppoId") ?: -1
 
-        composable("modificaGruppo") { ModificaGruppoScreen(navController) }
+            val viewModel: ModificaGruppoViewModel = viewModel(
+                factory = ModificaGruppoViewModelFactory(
+                    AppContainer.gruppoRepository,
+                    AppContainer.amicoRepository
+                )
+            )
+
+            ModificaGruppoScreen(
+                navController = navController,
+                gruppoId = gruppoId,
+                viewModel = viewModel
+            )
+        }
+
         composable("nuovaUscita") { NuovaUscitaScreen(navController) }
         composable("calcolo") { CalcoloScreen(navController) }
     }

@@ -1,30 +1,34 @@
 package it.col.mar.android.carkarma.data.database
 
 import it.col.mar.android.carkarma.data.model.Amico
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class AmicoRepository {
 
-    private val amici = mutableListOf<Amico>()
+    private val _amici = MutableStateFlow<List<Amico>>(emptyList())
+    val amici: StateFlow<List<Amico>> = _amici.asStateFlow()
 
     init {
-        amici.add(Amico(1, "Marco", 2, 5, 3, 300))
-        amici.add(Amico(2, "Luca", 1, 3, 2, 200))
-        amici.add(Amico(3, "Giulia", 2, 4, 1, 150))
+        _amici.value = listOf(
+            Amico(1, "Marco", 2, 5, 3, 300),
+            Amico(2, "Luca", 1, 3, 2, 200),
+            Amico(3, "Giulia", 0, 2, 1, 150)
+        )
     }
 
-    fun getTuttiGliAmici(): List<Amico> {
-        return amici
-    }
+    fun getTuttiGliAmici(): List<Amico> = _amici.value
 
     fun aggiungiAmico(amico: Amico) {
-        amici.add(amico)
+        _amici.value = _amici.value + amico
     }
 
     fun rimuoviAmico(amico: Amico) {
-        amici.remove(amico)
+        _amici.value = _amici.value - amico
     }
 
     fun getAmicoPerId(id: Int): Amico? {
-        return amici.find { it.id == id }
+        return _amici.value.find { it.id == id }
     }
 }

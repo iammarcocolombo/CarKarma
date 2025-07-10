@@ -1,10 +1,21 @@
 package it.col.mar.android.carkarma.presentation.home
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -17,9 +28,12 @@ import it.col.mar.android.carkarma.data.model.Gruppo
 
 @Composable
 fun HomeScreen(
-    navController: NavHostController,
-    viewModel: HomeViewModel = viewModel()
+    navController: NavHostController
 ) {
+    val viewModel: HomeViewModel = viewModel(
+        factory = HomeViewModelFactory(it.col.mar.android.carkarma.data.database.AppContainer.gruppoRepository)
+    )
+
     val gruppi by viewModel.gruppi.collectAsState()
 
     Column(
@@ -63,7 +77,7 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = { navController.navigate("modificaGruppo") },
+            onClick = { navController.navigate("modificaGruppo/-1") },  // naviga con id -1
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -77,6 +91,7 @@ fun HomeScreen(
                 style = MaterialTheme.typography.labelLarge
             )
         }
+
     }
 }
 

@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -14,9 +15,9 @@ import androidx.navigation.NavController
 fun GruppoScreen(
     navController: NavController,
     gruppoId: Int,
-    viewModel: GruppoViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    viewModel: GruppoViewModel
 ) {
-    LaunchedEffect(gruppoId) {
+    LaunchedEffect(gruppoId, navController.currentBackStackEntry) {
         viewModel.loadGruppo(gruppoId)
     }
 
@@ -25,18 +26,18 @@ fun GruppoScreen(
     val errorMessage by viewModel.errorMessage.collectAsState()
 
     if (errorMessage != null) {
-        Text(
-            text = errorMessage ?: "",
-            modifier = Modifier.padding(16.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error
-        )
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                text = errorMessage ?: "",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
         return
     }
 
     if (gruppo == null) {
-        // Se il gruppo non è ancora caricato, puoi mostrare un loader o placeholder
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
         return
@@ -52,6 +53,7 @@ fun GruppoScreen(
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
+
         Text(
             text = "${gruppo!!.amici.size} componenti",
             style = MaterialTheme.typography.bodyLarge,
@@ -63,9 +65,12 @@ fun GruppoScreen(
             modifier = Modifier.weight(1f)
         ) {
             items(uscite) { uscita ->
-                UscitaCard(uscita = uscita, onClick = {
-                    // Azione sul click di una uscita (se serve)
-                })
+                UscitaCard(
+                    uscita = uscita,
+                    onClick = {
+                        // se vorrai navigare ai dettagli
+                    }
+                )
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
@@ -82,8 +87,25 @@ fun GruppoScreen(
                 color = MaterialTheme.colorScheme.onPrimary
             )
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Button(
+            onClick = { navController.navigate("modificaGruppo/${gruppo!!.id}") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+        ) {
+            Text(
+                "Modifica Gruppo",
+                color = MaterialTheme.colorScheme.onSecondary
+            )
+        }
     }
 }
+
+
 
 @Composable
 fun UscitaCard(uscita: it.col.mar.android.carkarma.data.model.Uscita, onClick: () -> Unit) {

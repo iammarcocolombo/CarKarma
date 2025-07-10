@@ -8,20 +8,13 @@ import kotlinx.coroutines.flow.StateFlow
 import it.col.mar.android.carkarma.data.model.Gruppo
 
 class HomeViewModel(
-    private val amicoRepository: AmicoRepository = AmicoRepository()
+    private val repository: GruppoRepository
 ) : ViewModel() {
 
-    private val repository = GruppoRepository(amicoRepository)
-
-    private val _gruppi = MutableStateFlow<List<Gruppo>>(emptyList())
-    val gruppi: StateFlow<List<Gruppo>> = _gruppi
-
-    init {
-        _gruppi.value = repository.getTuttiIGruppi()
-    }
+    // Qui direttamente il flow dal repository
+    val gruppi: StateFlow<List<Gruppo>> = repository.gruppi
 
     fun aggiungiGruppo(gruppo: Gruppo) {
         repository.aggiungiGruppo(gruppo)
-        _gruppi.value = repository.getTuttiIGruppi()
     }
 }

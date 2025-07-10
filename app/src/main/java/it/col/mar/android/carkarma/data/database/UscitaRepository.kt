@@ -2,16 +2,20 @@ package it.col.mar.android.carkarma.data.database
 
 import it.col.mar.android.carkarma.data.model.Amico
 import it.col.mar.android.carkarma.data.model.Uscita
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class UscitaRepository {
 
-    private val uscite = mutableListOf<Uscita>()
+    private val _uscite = MutableStateFlow<List<Uscita>>(emptyList())
+    val uscite: StateFlow<List<Uscita>> = _uscite.asStateFlow()
 
     init {
         val amico1 = Amico(1, "Marco", 2, 5, 3, 300)
         val amico2 = Amico(2, "Luca", 1, 3, 2, 200)
 
-        uscite.add(
+        val iniziali = listOf(
             Uscita(
                 id = 1,
                 nome = "Gita al Lago",
@@ -19,9 +23,7 @@ class UscitaRepository {
                 partecipanti = listOf(amico1, amico2),
                 kmTotali = 120,
                 guidatori = listOf(amico1)
-            )
-        )
-        uscite.add(
+            ),
             Uscita(
                 id = 2,
                 nome = "Weekend in Montagna",
@@ -31,25 +33,29 @@ class UscitaRepository {
                 guidatori = listOf(amico1)
             )
         )
+
+        _uscite.value = iniziali
     }
 
-    fun getTutteLeUscite(): List<Uscita> {
-        return uscite
-    }
+    fun getTutteLeUscite(): List<Uscita> = _uscite.value
 
     fun aggiungiUscita(uscita: Uscita) {
-        uscite.add(uscita)
+        _uscite.value = _uscite.value + uscita
     }
 
     fun rimuoviUscita(uscita: Uscita) {
-        uscite.remove(uscita)
+        _uscite.value = _uscite.value - uscita
     }
 
     fun getUscitePerGruppo(gruppoId: Int): List<Uscita> {
-        return uscite.filter { it.gruppoId == gruppoId }
+        return _uscite.value.filter { it.gruppoId == gruppoId }
     }
 
     fun getUscitaPerId(id: Int): Uscita? {
-        return uscite.find { it.id == id }
+        return _uscite.value.find { it.id == id }
+    }
+
+    fun eliminaUscitePerGruppo(gruppoId: Int) {
+        _uscite.value = _uscite.value.filterNot { it.gruppoId == gruppoId }
     }
 }

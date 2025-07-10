@@ -12,9 +12,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class GruppoViewModel(
-    private val amicoRepository: AmicoRepository = AmicoRepository(),
-    private val gruppoRepository: GruppoRepository = GruppoRepository(amicoRepository),
-    private val uscitaRepository: UscitaRepository = UscitaRepository()
+    private val amicoRepository: AmicoRepository,
+    private val gruppoRepository: GruppoRepository,
+    private val uscitaRepository: UscitaRepository
 ) : ViewModel() {
 
     private val _gruppo = MutableStateFlow<Gruppo?>(null)
