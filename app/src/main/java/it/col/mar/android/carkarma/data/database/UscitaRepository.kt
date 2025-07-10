@@ -43,8 +43,14 @@ class UscitaRepository {
         _uscite.value = _uscite.value + uscita
     }
 
-    fun rimuoviUscita(uscita: Uscita) {
-        _uscite.value = _uscite.value - uscita
+    fun aggiornaUscita(uscita: Uscita) {
+        _uscite.value = _uscite.value.map {
+            if (it.id == uscita.id) uscita else it
+        }
+    }
+
+    fun eliminaUscita(uscitaId: Int) {
+        _uscite.value = _uscite.value.filterNot { it.id == uscitaId }
     }
 
     fun getUscitePerGruppo(gruppoId: Int): List<Uscita> {
@@ -57,5 +63,9 @@ class UscitaRepository {
 
     fun eliminaUscitePerGruppo(gruppoId: Int) {
         _uscite.value = _uscite.value.filterNot { it.gruppoId == gruppoId }
+    }
+
+    fun generaNuovoId(): Int {
+        return (_uscite.value.maxOfOrNull { it.id } ?: 0) + 1
     }
 }

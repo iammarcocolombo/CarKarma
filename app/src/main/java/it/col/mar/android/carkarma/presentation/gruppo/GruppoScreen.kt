@@ -83,7 +83,7 @@ fun GruppoScreen(
                 UscitaCard(
                     uscita = uscita,
                     onClick = {
-                        // se vorrai navigare ai dettagli
+                        navController.navigate("uscita/${gruppoId}/${uscita.id}")
                     }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -91,7 +91,7 @@ fun GruppoScreen(
         }
 
         Button(
-            onClick = { navController.navigate("nuovaUscita") },
+            onClick = { navController.navigate("uscita/${gruppoId}/-1") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),

@@ -19,7 +19,9 @@ import it.col.mar.android.carkarma.presentation.gruppo.modifica.ModificaGruppoSc
 import it.col.mar.android.carkarma.presentation.gruppo.modifica.ModificaGruppoViewModel
 import it.col.mar.android.carkarma.presentation.gruppo.modifica.ModificaGruppoViewModelFactory
 import it.col.mar.android.carkarma.presentation.home.HomeScreen
-import it.col.mar.android.carkarma.presentation.uscita.NuovaUscitaScreen
+import it.col.mar.android.carkarma.presentation.uscita.UscitaScreen
+import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModel
+import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModelFactory
 
 
 @Composable
@@ -75,7 +77,31 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
             )
         }
 
-        composable("nuovaUscita") { NuovaUscitaScreen(navController) }
+        composable(
+            "uscita/{gruppoId}/{uscitaId}",
+            arguments = listOf(
+                navArgument("gruppoId") { type = NavType.IntType },
+                navArgument("uscitaId") { type = NavType.IntType; defaultValue = -1 } // -1 = nuova uscita
+            )
+        ) { backStackEntry ->
+            val gruppoId = backStackEntry.arguments?.getInt("gruppoId") ?: -1
+            val uscitaId = backStackEntry.arguments?.getInt("uscitaId") ?: -1
+
+            val viewModel: UscitaViewModel = viewModel(
+                factory = UscitaViewModelFactory(
+                    AppContainer.uscitaRepository,
+                    AppContainer.amicoRepository
+                )
+            )
+
+            UscitaScreen(
+                navController = navController,
+                gruppoId = gruppoId,
+                uscitaId = uscitaId,
+                viewModel = viewModel
+            )
+        }
+
         composable("calcolo") { CalcoloScreen(navController) }
     }
 }
