@@ -98,7 +98,6 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
             val viewModel: UscitaViewModel = viewModel(
                 factory = UscitaViewModelFactory(
                     AppContainer.uscitaRepository,
-                    AppContainer.amicoRepository,
                     AppContainer.gruppoRepository
                 )
             )

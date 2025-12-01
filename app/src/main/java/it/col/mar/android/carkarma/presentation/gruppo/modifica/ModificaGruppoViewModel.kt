@@ -8,7 +8,9 @@ import it.col.mar.android.carkarma.data.model.Amico
 import it.col.mar.android.carkarma.data.model.Gruppo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 class ModificaGruppoViewModel(
     private val gruppoRepository: GruppoRepository,
@@ -18,32 +20,32 @@ class ModificaGruppoViewModel(
     private val _nomeGruppo = MutableStateFlow("")
     val nomeGruppo: StateFlow<String> = _nomeGruppo
 
-    // CORREZIONE: Colleghiamo direttamente il flusso del repository.
-    // In questo modo, qualsiasi cambiamento nel DB (anche se aggiungi un amico da un'altra parte)
-    // si riflette immediatamente qui senza bisogno di init o reload manuali.
+    // Gli "stampini" dalla rubrica globale (lista completa per la selezione)
     val amiciDisponibili: StateFlow<List<Amico>> = amicoRepository.amici
 
-    // Set degli ID degli amici selezionati
-    private val _amiciSelezionati = MutableStateFlow<Set<String>>(emptySet())
-    val amiciSelezionati: StateFlow<Set<String>> = _amiciSelezionati
+    // Set degli ID degli amici selezionati nella UI
+    private val _amiciSelezionatiIds = MutableStateFlow<Set<String>>(emptySet())
+    val amiciSelezionati: StateFlow<Set<String>> = _amiciSelezionatiIds
 
     private var currentGruppoId: String = ""
 
     fun loadGruppo(gruppoId: String) {
         this.currentGruppoId = gruppoId
         viewModelScope.launch {
-            // Se stiamo modificando, carica i dati del gruppo
             if (gruppoId.isNotEmpty()) {
                 val gruppo = gruppoRepository.getGruppoPerId(gruppoId)
                 if (gruppo != null) {
                     _nomeGruppo.value = gruppo.nome
-                    // Importante: In Gruppo ora abbiamo membriIds (List<String>)
-                    _amiciSelezionati.value = gruppo.membriIds.toSet()
+
+                    // Carichiamo i membri che sono GIA' nel gruppo per pre-spuntare le checkbox.
+                    // Usiamo .first() per prendere un'istantanea dei membri attuali.
+                    val membriAttuali = gruppoRepository.getMembriDelGruppo(gruppoId).first()
+                    _amiciSelezionatiIds.value = membriAttuali.map { it.id }.toSet()
                 }
             } else {
-                // Nuovo gruppo: resetta i campi
+                // Nuovo gruppo: tutto vuoto
                 _nomeGruppo.value = ""
-                _amiciSelezionati.value = emptySet()
+                _amiciSelezionatiIds.value = emptySet()
             }
         }
     }
@@ -53,33 +55,61 @@ class ModificaGruppoViewModel(
     }
 
     fun toggleAmicoSelezionato(amicoId: String) {
-        _amiciSelezionati.value = _amiciSelezionati.value.toMutableSet().apply {
+        _amiciSelezionatiIds.value = _amiciSelezionatiIds.value.toMutableSet().apply {
             if (contains(amicoId)) remove(amicoId) else add(amicoId)
         }
     }
 
     fun salvaGruppo(onSalvato: () -> Unit) {
         viewModelScope.launch {
-            // Prendiamo gli ID selezionati
-            val listaMembriIds = _amiciSelezionati.value.toList()
+            // Generiamo l'ID qui se è nuovo, così possiamo usarlo sia per il gruppo che per i membri
+            val idFinale = if (currentGruppoId.isEmpty()) UUID.randomUUID().toString() else currentGruppoId
+
+            // 1. Salviamo il documento del Gruppo (Intestazione)
+            // Salviamo anche la lista degli ID per comodità di visualizzazione nella Home
+            val gruppo = Gruppo(
+                id = idFinale,
+                nome = _nomeGruppo.value,
+                membriIds = _amiciSelezionatiIds.value.toList()
+            )
+            gruppoRepository.aggiungiGruppo(gruppo)
+
+            // 2. Gestione intelligente dei Membri (Sottocollezione)
+            val tuttiStampini = amicoRepository.amici.value
+            val idsSelezionatiUI = _amiciSelezionatiIds.value
 
             if (currentGruppoId.isEmpty()) {
-                // NUOVO GRUPPO
-                val nuovoGruppo = Gruppo(
-                    id = "",
-                    nome = _nomeGruppo.value,
-                    membriIds = listaMembriIds
-                )
-                gruppoRepository.aggiungiGruppo(nuovoGruppo)
+                // CASO A: NUOVO GRUPPO -> Aggiungiamo tutti i selezionati (nuove istanze km 0)
+                idsSelezionatiUI.forEach { id ->
+                    val template = tuttiStampini.find { it.id == id }
+                    if (template != null) {
+                        gruppoRepository.aggiungiMembroAlGruppo(idFinale, template)
+                    }
+                }
             } else {
-                // MODIFICA ESISTENTE
-                val gruppoAggiornato = Gruppo(
-                    id = currentGruppoId,
-                    nome = _nomeGruppo.value,
-                    membriIds = listaMembriIds
-                )
-                gruppoRepository.aggiornaGruppo(gruppoAggiornato)
+                // CASO B: GRUPPO ESISTENTE -> Dobbiamo fare un "diff" (differenza)
+                // Recuperiamo gli ID di chi è GIA' salvato nel DB del gruppo
+                val membriNelDbIds = gruppoRepository.getMembriDelGruppo(idFinale).first().map { it.id }.toSet()
+
+                // 1. Chi c'è nella UI ma NON nel DB? -> Sono NUOVI membri -> Li aggiungiamo (km 0)
+                val nuoviMembriIds = idsSelezionatiUI.filter { !membriNelDbIds.contains(it) }
+                nuoviMembriIds.forEach { id ->
+                    val template = tuttiStampini.find { it.id == id }
+                    if (template != null) {
+                        gruppoRepository.aggiungiMembroAlGruppo(idFinale, template)
+                    }
+                }
+
+                // 2. Chi c'era nel DB ma NON è più nella UI? -> Sono RIMOSSI -> Li cancelliamo
+                val rimossiMembriIds = membriNelDbIds.filter { !idsSelezionatiUI.contains(it) }
+                rimossiMembriIds.forEach { id ->
+                    gruppoRepository.rimuoviMembroDalGruppo(idFinale, id)
+                }
+
+                // 3. Chi c'è in entrambi? -> NON FACCIAMO NULLA!
+                // Questo è il trucco: non toccando i membri esistenti, preserviamo i loro km accumulati.
             }
+
             onSalvato()
         }
     }
