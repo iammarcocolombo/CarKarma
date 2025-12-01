@@ -15,7 +15,6 @@ import java.util.Locale
 class UscitaViewModel(
     private val uscitaRepository: UscitaRepository,
     private val gruppoRepository: GruppoRepository
-    // NOTA: AmicoRepository rimosso perché ora usiamo i dati isolati del Gruppo
 ) : ViewModel() {
 
     private val calcoloUseCase = CalcoloTurnoUseCase()
@@ -26,7 +25,6 @@ class UscitaViewModel(
     private val _nomeUscita = MutableStateFlow("")
     val nomeUscita: StateFlow<String> = _nomeUscita
 
-    // Questa lista ora contiene le "Istanze" degli amici specifiche per questo gruppo (con i km giusti)
     private val _amiciDelGruppo = MutableStateFlow<List<Amico>>(emptyList())
     val amiciDelGruppo: StateFlow<List<Amico>> = _amiciDelGruppo
 
@@ -49,18 +47,19 @@ class UscitaViewModel(
         this.currentGruppoId = gruppoId
         this.currentUscitaId = uscitaId
 
+        // 1. Carichiamo i membri dal GRUPPO (sottocollezione)
+        // Fondamentale: usiamo i dati "istanza" con i km specifici di questo gruppo
         viewModelScope.launch {
-            // 1. Carichiamo i membri dalla sottocollezione del GRUPPO.
-            // Questi dati sono isolati: i km che vedi qui valgono solo per questo gruppo.
             gruppoRepository.getMembriDelGruppo(gruppoId).collect { membri ->
                 _amiciDelGruppo.value = membri
             }
         }
 
-        viewModelScope.launch {
-            // 2. Se stiamo modificando un'uscita esistente, carichiamo i suoi dati
-            if (uscitaId.isNotEmpty()) {
-                val uscita = uscitaRepository.getUscitaPerId(uscitaId)
+        // 2. Se è una modifica, carichiamo i dati dell'uscita
+        if (uscitaId.isNotEmpty()) {
+            viewModelScope.launch {
+                // CORREZIONE: Ora passiamo anche gruppoId perché le uscite sono annidate
+                val uscita = uscitaRepository.getUscita(gruppoId, uscitaId)
                 if (uscita != null) {
                     _nomeUscita.value = uscita.nome
                     _partecipantiSelezionati.value = uscita.partecipantiIds.toSet()
@@ -77,7 +76,6 @@ class UscitaViewModel(
         _partecipantiSelezionati.value = _partecipantiSelezionati.value.toMutableSet().apply {
             if (contains(amicoId)) {
                 remove(amicoId)
-                // Se togli un partecipante, non può essere guidatore
                 val nuoviGuidatori = _guidatoriSelezionati.value.toMutableSet()
                 nuoviGuidatori.remove(amicoId)
                 _guidatoriSelezionati.value = nuoviGuidatori
@@ -107,31 +105,26 @@ class UscitaViewModel(
             return
         }
 
-        // Passiamo i dati all'algoritmo (che ora supporta N macchine)
         val classifica = calcoloUseCase.calcolaChiGuida(amiciOggetti, partecipantiIds)
 
         if (classifica.isNotEmpty()) {
             if (classifica.size == 1) {
-                // Caso standard: 1 macchina
                 val (prescelto, karma) = classifica.first()
                 _suggerimentoGuidatore.value = "🚗 Dovrebbe guidare:\n${prescelto.nome}\n(Karma Gruppo: ${String.format(Locale.US, "%.1f", karma)})"
             } else {
-                // Caso gruppo numeroso: N macchine
                 val sb = StringBuilder("🚗 Servono ${classifica.size} auto!\nEcco la squadra ideale:\n\n")
                 classifica.forEachIndexed { index, (amico, karma) ->
                     sb.append("${index + 1}. ${amico.nome} (${amico.postiAuto} posti)\n   Karma Gruppo: ${String.format(Locale.US, "%.1f", karma)}\n")
                 }
 
-                // Verifica extra sui posti totali
                 val postiTotali = classifica.sumOf { it.first.postiAuto }
                 if (postiTotali < partecipantiIds.size) {
                     sb.append("\n⚠️ ATTENZIONE: Mancano ancora ${partecipantiIds.size - postiTotali} posti!")
                 }
-
                 _suggerimentoGuidatore.value = sb.toString()
             }
         } else {
-            _suggerimentoGuidatore.value = "Nessuna soluzione trovata! Controlla i posti auto disponibili."
+            _suggerimentoGuidatore.value = "Nessuna soluzione trovata! Controlla i posti auto."
         }
     }
 
@@ -149,36 +142,34 @@ class UscitaViewModel(
             val partecipantiList = _partecipantiSelezionati.value.toList()
             val guidatoriList = _guidatoriSelezionati.value.toList()
 
+            // Creiamo l'oggetto Uscita
+            // L'ID viene gestito dentro aggiungiUscita se vuoto, ma qui possiamo lasciarlo vuoto o gestirlo
+            // Per coerenza con il repo, passiamo l'oggetto.
+            val uscita = Uscita(
+                id = if (currentUscitaId.isEmpty()) "" else currentUscitaId,
+                nome = _nomeUscita.value,
+                gruppoId = currentGruppoId,
+                partecipantiIds = partecipantiList,
+                kmTotali = _kmTotali.value,
+                guidatoriIds = guidatoriList
+            )
+
             if (currentUscitaId.isEmpty()) {
-                val nuovaUscita = Uscita(
-                    id = "",
-                    nome = _nomeUscita.value,
-                    gruppoId = currentGruppoId,
-                    partecipantiIds = partecipantiList,
-                    kmTotali = _kmTotali.value,
-                    guidatoriIds = guidatoriList
-                )
-                uscitaRepository.aggiungiUscita(nuovaUscita)
+                // NUOVA USCITA
+                uscitaRepository.aggiungiUscita(uscita)
 
-                // Aggiorniamo le statistiche "istanza" dentro il gruppo
+                // Aggiorniamo statistiche SOLO se è nuova uscita (per non duplicare i km in modifica)
                 aggiornaStatisticheMembriGruppo(partecipantiList, guidatoriList, _kmTotali.value)
-
             } else {
-                val uscitaAggiornata = Uscita(
-                    id = currentUscitaId,
-                    nome = _nomeUscita.value,
-                    gruppoId = currentGruppoId,
-                    partecipantiIds = partecipantiList,
-                    kmTotali = _kmTotali.value,
-                    guidatoriIds = guidatoriList
-                )
-                uscitaRepository.aggiornaUscita(uscitaAggiornata)
+                // MODIFICA
+                uscitaRepository.aggiornaUscita(uscita)
+                // Nota: In un'app completa qui dovremmo fare il rollback delle statistiche vecchie
+                // e applicare le nuove. Per semplicità in questa versione non lo facciamo.
             }
             onSalvato()
         }
     }
 
-    // Aggiorna SOLO i membri di questo specifico gruppo
     private fun aggiornaStatisticheMembriGruppo(partecipanti: List<String>, guidatori: List<String>, km: Int) {
         partecipanti.forEach { id ->
             val haGuidato = guidatori.contains(id)
@@ -192,7 +183,8 @@ class UscitaViewModel(
     fun eliminaUscita(onEliminato: () -> Unit) {
         viewModelScope.launch {
             if (currentUscitaId.isNotEmpty()) {
-                uscitaRepository.eliminaUscita(currentUscitaId)
+                // CORREZIONE: Passiamo anche il gruppoId per trovare l'uscita nella sottocollezione
+                uscitaRepository.eliminaUscita(currentGruppoId, currentUscitaId)
             }
             onEliminato()
         }

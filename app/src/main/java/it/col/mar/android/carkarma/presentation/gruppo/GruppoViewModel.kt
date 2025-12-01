@@ -30,23 +30,22 @@ class GruppoViewModel(
         viewModelScope.launch {
             if (gruppoId.isEmpty()) {
                 _errorMessage.value = "ID gruppo non valido"
-                _gruppo.value = null
-                _uscite.value = emptyList()
                 return@launch
             }
 
-            // Usiamo i metodi aggiornati che accettano String
+            // Carica info Gruppo
             val g = gruppoRepository.getGruppoPerId(gruppoId)
-
             if (g == null) {
                 _errorMessage.value = "Gruppo non trovato"
                 _gruppo.value = null
-                _uscite.value = emptyList()
             } else {
                 _errorMessage.value = null
                 _gruppo.value = g
-                // Carichiamo anche le uscite del gruppo
-                _uscite.value = uscitaRepository.getUscitePerGruppo(gruppoId)
+
+                // Carica Uscite collegate in tempo reale
+                uscitaRepository.getUsciteDelGruppo(gruppoId).collect { listaUscite ->
+                    _uscite.value = listaUscite
+                }
             }
         }
     }

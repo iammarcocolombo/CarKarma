@@ -2,63 +2,84 @@ package it.col.mar.android.carkarma.data.database
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.toObject
 import com.google.firebase.firestore.toObjects
 import it.col.mar.android.carkarma.data.model.Uscita
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 class UscitaRepository(
     private val db: FirebaseFirestore,
     private val auth: FirebaseAuth
 ) {
-    private val _uscite = MutableStateFlow<List<Uscita>>(emptyList())
-    val uscite: StateFlow<List<Uscita>> = _uscite.asStateFlow()
 
-    init {
-        // Ascolto real-time della collezione "uscite"
-        db.collection("uscite")
+    // NON carichiamo più tutte le uscite del mondo in una lista globale.
+    // Usiamo i Flow per ascoltare solo quello che ci serve.
+
+    /**
+     * Ascolta in tempo reale le uscite di uno specifico gruppo (Sottocollezione).
+     */
+    fun getUsciteDelGruppo(gruppoId: String): Flow<List<Uscita>> = callbackFlow {
+        val registration = db.collection("gruppi").document(gruppoId).collection("uscite")
+            // Ordiniamo per data (se hai un campo data, altrimenti per nome o id)
             .addSnapshotListener { snapshot, e ->
-                if (e != null) return@addSnapshotListener
+                if (e != null) {
+                    close(e)
+                    return@addSnapshotListener
+                }
                 if (snapshot != null) {
-                    _uscite.value = snapshot.toObjects<Uscita>()
+                    val uscite = snapshot.toObjects<Uscita>()
+                    trySend(uscite)
                 }
             }
+        awaitClose { registration.remove() }
     }
 
-    fun getTutteLeUscite(): List<Uscita> = _uscite.value
-
-    fun getUscitePerGruppo(gruppoId: String): List<Uscita> {
-        return _uscite.value.filter { it.gruppoId == gruppoId }
-    }
-
-    fun getUscitaPerId(id: String): Uscita? {
-        return _uscite.value.find { it.id == id }
+    /**
+     * Recupera una singola uscita (serve sapere il gruppoId per trovarla).
+     */
+    suspend fun getUscita(gruppoId: String, uscitaId: String): Uscita? {
+        return try {
+            val snapshot = db.collection("gruppi").document(gruppoId)
+                .collection("uscite").document(uscitaId).get().await()
+            snapshot.toObject<Uscita>()
+        } catch (e: Exception) {
+            null
+        }
     }
 
     fun aggiungiUscita(uscita: Uscita) {
         val idFinale = if (uscita.id.isEmpty()) UUID.randomUUID().toString() else uscita.id
         val uscitaDaSalvare = uscita.copy(id = idFinale)
-        db.collection("uscite").document(idFinale).set(uscitaDaSalvare)
+
+        // Salviamo nella SOTTOCOLLEZIONE: gruppi/{id}/uscite/{id}
+        db.collection("gruppi").document(uscita.gruppoId)
+            .collection("uscite").document(idFinale)
+            .set(uscitaDaSalvare)
     }
 
     fun aggiornaUscita(uscita: Uscita) {
         aggiungiUscita(uscita)
     }
 
-    fun eliminaUscita(uscitaId: String) {
-        db.collection("uscite").document(uscitaId).delete()
+    fun eliminaUscita(gruppoId: String, uscitaId: String) {
+        db.collection("gruppi").document(gruppoId)
+            .collection("uscite").document(uscitaId)
+            .delete()
     }
 
-    // Funzione chiave per la tua richiesta
-    fun eliminaUscitePerGruppo(gruppoId: String) {
-        // Troviamo tutte le uscite di questo gruppo nella nostra lista locale
-        val usciteDelGruppo = _uscite.value.filter { it.gruppoId == gruppoId }
+    // Questa funzione viene chiamata da GruppoRepository quando elimini un gruppo
+    fun eliminaTutteUsciteDelGruppo(gruppoId: String) {
+        val collectionRef = db.collection("gruppi").document(gruppoId).collection("uscite")
 
-        // Le eliminiamo una per una da Firebase
-        for (uscita in usciteDelGruppo) {
-            eliminaUscita(uscita.id)
+        // Firestore richiede di scaricare i documenti per cancellarli uno a uno
+        collectionRef.get().addOnSuccessListener { snapshot ->
+            for (doc in snapshot.documents) {
+                doc.reference.delete()
+            }
         }
     }
 }
