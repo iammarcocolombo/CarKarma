@@ -1,36 +1,15 @@
 package it.col.mar.android.carkarma.presentation.uscita
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -50,26 +29,31 @@ fun UscitaScreen(
         viewModel.loadUscita(gruppoId, uscitaId)
     }
 
+    // Stati della UI collegati al ViewModel
     val nomeUscita by viewModel.nomeUscita.collectAsState()
     val amiciDelGruppo by viewModel.amiciDelGruppo.collectAsState()
     val partecipantiSelezionati by viewModel.partecipantiSelezionati.collectAsState()
     val guidatoriSelezionati by viewModel.guidatoriSelezionati.collectAsState()
     val kmTotali by viewModel.kmTotali.collectAsState()
 
-    // Stato per il dialog del suggerimento algoritmo
+    // Stati per i dialog (Suggerimento Algoritmo ed Errori)
     val suggerimento by viewModel.suggerimentoGuidatore.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
 
     var showEliminaDialog by remember { mutableStateOf(false) }
     val isEditing = uscitaId.isNotEmpty()
 
-    // Validazione base per abilitare il salvataggio
-    val isFormValid = nomeUscita.isNotBlank() && kmTotali > 0 && partecipantiSelezionati.isNotEmpty() && guidatoriSelezionati.isNotEmpty()
+    // Validazione base per abilitare il pulsante Salva (ma il ViewModel fa un controllo extra)
+    val isFormValid = nomeUscita.isNotBlank() && kmTotali > 0 &&
+            partecipantiSelezionati.isNotEmpty() &&
+            guidatoriSelezionati.isNotEmpty()
 
     Column(
         modifier = Modifier
             .padding(16.dp)
             .fillMaxSize()
     ) {
+        // Titolo della schermata
         Text(
             text = if (isEditing) "Modifica Uscita" else "Nuova Uscita",
             style = MaterialTheme.typography.headlineSmall,
@@ -77,6 +61,7 @@ fun UscitaScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
+        // Campo Nome Uscita
         OutlinedTextField(
             value = nomeUscita,
             onValueChange = { viewModel.onNomeUscitaChange(it) },
@@ -88,7 +73,11 @@ fun UscitaScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // --- SEZIONE PARTECIPANTI ---
-        Text("Chi è presente?", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = "Chi è presente? (${partecipantiSelezionati.size})",
+            style = MaterialTheme.typography.titleMedium
+        )
+
         LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
             items(amiciDelGruppo) { amico ->
                 Row(
@@ -101,14 +90,17 @@ fun UscitaScreen(
                         checked = partecipantiSelezionati.contains(amico.id),
                         onCheckedChange = { viewModel.togglePartecipanteSelezionato(amico.id) }
                     )
-                    Text(text = amico.nome, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = "${amico.nome} (${amico.postiAuto} posti)",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // --- BOTTONE CALCOLO (Tra le due liste) ---
+        // --- BOTTONE SUGGERIMENTO ALGORITMO ---
         // Visibile solo se c'è almeno un partecipante selezionato
         if (partecipantiSelezionati.isNotEmpty()) {
             OutlinedButton(
@@ -126,17 +118,16 @@ fun UscitaScreen(
 
         // --- SEZIONE GUIDATORI ---
         if (partecipantiSelezionati.isNotEmpty()) {
-            Text("Chi ha guidato effettivamente?", style = MaterialTheme.typography.titleMedium)
+            Text("Chi ha guidato?", style = MaterialTheme.typography.titleMedium)
             LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // Filtriamo: mostriamo solo chi è stato selezionato come partecipante
-                val candidatiGuidatori = amiciDelGruppo.filter { partecipantiSelezionati.contains(it.id) }
+                val candidati = amiciDelGruppo.filter { partecipantiSelezionati.contains(it.id) }
 
-                items(candidatiGuidatori) { amico ->
+                items(candidati) { amico ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                             .clickable { viewModel.toggleGuidatoreSelezionato(amico.id) }
-                            .padding(vertical = 0.dp)
                     ) {
                         Checkbox(
                             checked = guidatoriSelezionati.contains(amico.id),
@@ -150,10 +141,11 @@ fun UscitaScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- KM TOTALI ---
+        // --- CAMPO KM TOTALI ---
         OutlinedTextField(
             value = if (kmTotali == 0) "" else kmTotali.toString(),
             onValueChange = { text ->
+                // Accetta solo numeri interi
                 if (text.all { it.isDigit() }) {
                     viewModel.setKmTotali(text.toIntOrNull() ?: 0)
                 }
@@ -168,13 +160,18 @@ fun UscitaScreen(
 
         // --- BOTTONE SALVA ---
         Button(
-            onClick = { viewModel.salvaUscita { navController.popBackStack() } },
+            onClick = {
+                viewModel.salvaUscita {
+                    navController.popBackStack()
+                }
+            },
             enabled = isFormValid,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Salva Uscita")
         }
 
+        // Tasto Elimina (solo se stiamo modificando un'uscita esistente)
         if (isEditing) {
             Spacer(modifier = Modifier.height(8.dp))
             TextButton(
@@ -187,7 +184,7 @@ fun UscitaScreen(
         }
     }
 
-    // --- DIALOG PER IL SUGGERIMENTO ---
+    // --- DIALOG: SUGGERIMENTO ALGORITMO ---
     if (suggerimento != null) {
         AlertDialog(
             onDismissRequest = { viewModel.resetSuggerimento() },
@@ -195,26 +192,46 @@ fun UscitaScreen(
             text = {
                 Text(
                     text = suggerimento ?: "",
-                    style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
             },
             confirmButton = {
                 TextButton(onClick = { viewModel.resetSuggerimento() }) {
-                    Text("OK, Ho capito")
+                    Text("OK")
                 }
             },
             icon = { Icon(Icons.Default.Info, contentDescription = null) }
         )
     }
 
-    // --- DIALOG CONFERMA ELIMINAZIONE ---
+    // --- DIALOG: ERRORE VALIDAZIONE ---
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.clearError() },
+            title = { Text("Attenzione") },
+            text = { Text(errorMessage ?: "") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearError() }) {
+                    Text("OK")
+                }
+            },
+            icon = {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        )
+    }
+
+    // --- DIALOG: CONFERMA ELIMINAZIONE ---
     if (showEliminaDialog) {
         AlertDialog(
             onDismissRequest = { showEliminaDialog = false },
-            title = { Text("Eliminare l'uscita?") },
-            text = { Text("Questa operazione annullerà i km registrati per questo viaggio.") },
+            title = { Text("Eliminare?") },
+            text = { Text("L'operazione è irreversibile. I dati verranno rimossi.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -227,7 +244,9 @@ fun UscitaScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEliminaDialog = false }) { Text("Annulla") }
+                TextButton(onClick = { showEliminaDialog = false }) {
+                    Text("Annulla")
+                }
             }
         )
     }

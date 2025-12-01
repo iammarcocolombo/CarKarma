@@ -11,14 +11,21 @@ object AppContainer {
     private val db: FirebaseFirestore = Firebase.firestore
     private val auth: FirebaseAuth = Firebase.auth
 
-    // Passiamo db e auth ai repository
+    // 1. Creiamo i repository che non dipendono da altri (o dipendono solo da DB/Auth)
     val amicoRepository = AmicoRepository(db, auth)
-    val gruppoRepository = GruppoRepository(db, auth, amicoRepository)
     val uscitaRepository = UscitaRepository(db, auth)
+
+    // 2. Creiamo GruppoRepository passandogli le dipendenze necessarie
+    // Ora gli passiamo anche uscitaRepository per gestire l'eliminazione a cascata
+    val gruppoRepository = GruppoRepository(
+        db,
+        auth,
+        amicoRepository,
+        uscitaRepository
+    )
 
     init {
         // Login Anonimo automatico all'avvio
-        // Serve per avere un UID e poter scrivere sul database in sicurezza
         if (auth.currentUser == null) {
             auth.signInAnonymously()
                 .addOnSuccessListener {

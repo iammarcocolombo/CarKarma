@@ -40,9 +40,12 @@ class UscitaViewModel(
     private val _kmTotali = MutableStateFlow(0)
     val kmTotali: StateFlow<Int> = _kmTotali
 
-    // NUOVO STATO: Contiene il messaggio del suggerimento (es. "Tocca a Marco (Karma -50)")
+    // NUOVO STATO: Contiene il messaggio del suggerimento (es. "Servono 2 auto: Marco e Luca")
     private val _suggerimentoGuidatore = MutableStateFlow<String?>(null)
     val suggerimentoGuidatore: StateFlow<String?> = _suggerimentoGuidatore
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage
 
     fun loadUscita(gruppoId: String, uscitaId: String) {
         this.currentGruppoId = gruppoId
@@ -53,6 +56,7 @@ class UscitaViewModel(
             val tuttiAmici = amicoRepository.getTuttiGliAmici()
 
             if (gruppo != null) {
+                // Filtriamo: mostriamo solo gli amici che fanno parte di questo gruppo
                 _amiciDelGruppo.value = tuttiAmici.filter { gruppo.membriIds.contains(it.id) }
             }
 
@@ -65,6 +69,7 @@ class UscitaViewModel(
                     _kmTotali.value = uscita.kmTotali
                 }
             } else {
+                // Reset per nuova uscita
                 _nomeUscita.value = ""
                 _partecipantiSelezionati.value = emptySet()
                 _guidatoriSelezionati.value = emptySet()
@@ -79,6 +84,7 @@ class UscitaViewModel(
         _partecipantiSelezionati.value = _partecipantiSelezionati.value.toMutableSet().apply {
             if (contains(amicoId)) {
                 remove(amicoId)
+                // Se rimuovi un partecipante, rimuovilo anche dai guidatori!
                 val nuoviGuidatori = _guidatoriSelezionati.value.toMutableSet()
                 nuoviGuidatori.remove(amicoId)
                 _guidatoriSelezionati.value = nuoviGuidatori
@@ -89,6 +95,7 @@ class UscitaViewModel(
     }
 
     fun toggleGuidatoreSelezionato(amicoId: String) {
+        // Puoi essere guidatore solo se sei partecipante
         if (_partecipantiSelezionati.value.contains(amicoId)) {
             _guidatoriSelezionati.value = _guidatoriSelezionati.value.toMutableSet().apply {
                 if (contains(amicoId)) remove(amicoId) else add(amicoId)
@@ -98,33 +105,53 @@ class UscitaViewModel(
 
     fun setKmTotali(km: Int) { _kmTotali.value = km }
 
-    // NUOVA FUNZIONE: Esegue l'algoritmo sui partecipanti attuali
+    // --- LOGICA SUGGERIMENTO DINAMICO ---
     fun calcolaSuggerimento() {
         val amiciOggetti = _amiciDelGruppo.value
         val partecipantiIds = _partecipantiSelezionati.value
 
-        if (partecipantiIds.isEmpty()) {
-            _suggerimentoGuidatore.value = "Seleziona almeno un partecipante!"
+        if (partecipantiIds.size < 2) {
+            _suggerimentoGuidatore.value = "Seleziona almeno 2 partecipanti."
             return
         }
 
-        // Chiamiamo l'algoritmo che hai nel domain layer
+        // Algoritmo dinamico (ora restituisce una LISTA di guidatori necessari)
         val classifica = calcoloUseCase.calcolaChiGuida(amiciOggetti, partecipantiIds)
 
         if (classifica.isNotEmpty()) {
-            val (prescelto, karma) = classifica.first()
-            _suggerimentoGuidatore.value = "Dovrebbe guidare: ${prescelto.nome}\n(Karma: ${String.format(Locale.US, "%.1f", karma)})"
+            if (classifica.size == 1) {
+                // Caso semplice: basta 1 auto
+                val (prescelto, karma) = classifica.first()
+                _suggerimentoGuidatore.value = "🚗 Dovrebbe guidare:\n${prescelto.nome}\n(Karma: ${String.format(Locale.US, "%.1f", karma)})"
+            } else {
+                // Caso complesso: servono N auto
+                val sb = StringBuilder("🚗 Servono ${classifica.size} auto!\nEcco la squadra ideale:\n\n")
+                classifica.forEachIndexed { index, (amico, karma) ->
+                    sb.append("${index + 1}. ${amico.nome} (${amico.postiAuto} posti)\n   Karma: ${String.format(Locale.US, "%.1f", karma)}\n")
+                }
+
+                // Controllo extra: verifichiamo se i posti bastano davvero
+                val postiTotali = classifica.sumOf { it.first.postiAuto }
+                if (postiTotali < partecipantiIds.size) {
+                    sb.append("\n⚠️ ATTENZIONE: Anche con queste auto mancano ${partecipantiIds.size - postiTotali} posti!")
+                }
+
+                _suggerimentoGuidatore.value = sb.toString()
+            }
         } else {
-            _suggerimentoGuidatore.value = "Nessun dato disponibile per il calcolo."
+            _suggerimentoGuidatore.value = "Nessuna soluzione trovata! Controlla i posti auto disponibili."
         }
     }
 
-    // Funzione per chiudere il dialog resettando lo stato
-    fun resetSuggerimento() {
-        _suggerimentoGuidatore.value = null
-    }
+    fun resetSuggerimento() { _suggerimentoGuidatore.value = null }
+    fun clearError() { _errorMessage.value = null }
 
     fun salvaUscita(onSalvato: () -> Unit) {
+        if (_partecipantiSelezionati.value.size < 2) {
+            _errorMessage.value = "Un'uscita richiede almeno 2 partecipanti."
+            return
+        }
+
         viewModelScope.launch {
             val partecipantiList = _partecipantiSelezionati.value.toList()
             val guidatoriList = _guidatoriSelezionati.value.toList()
