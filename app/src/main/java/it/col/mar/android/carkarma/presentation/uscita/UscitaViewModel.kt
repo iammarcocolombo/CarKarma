@@ -7,15 +7,20 @@ import it.col.mar.android.carkarma.data.database.GruppoRepository
 import it.col.mar.android.carkarma.data.database.UscitaRepository
 import it.col.mar.android.carkarma.data.model.Amico
 import it.col.mar.android.carkarma.data.model.Uscita
+import it.col.mar.android.carkarma.domain.CalcoloTurnoUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class UscitaViewModel(
     private val uscitaRepository: UscitaRepository,
     private val amicoRepository: AmicoRepository,
-    private val gruppoRepository: GruppoRepository // Aggiunto per filtrare gli amici
+    private val gruppoRepository: GruppoRepository
 ) : ViewModel() {
+
+    // Istanza dell'algoritmo (logica pura)
+    private val calcoloUseCase = CalcoloTurnoUseCase()
 
     private var currentUscitaId: String = ""
     private var currentGruppoId: String = ""
@@ -23,11 +28,9 @@ class UscitaViewModel(
     private val _nomeUscita = MutableStateFlow("")
     val nomeUscita: StateFlow<String> = _nomeUscita
 
-    // Lista filtrata: solo gli amici che appartengono a questo gruppo
     private val _amiciDelGruppo = MutableStateFlow<List<Amico>>(emptyList())
     val amiciDelGruppo: StateFlow<List<Amico>> = _amiciDelGruppo
 
-    // Set di ID String
     private val _partecipantiSelezionati = MutableStateFlow<Set<String>>(emptySet())
     val partecipantiSelezionati: StateFlow<Set<String>> = _partecipantiSelezionati
 
@@ -37,24 +40,22 @@ class UscitaViewModel(
     private val _kmTotali = MutableStateFlow(0)
     val kmTotali: StateFlow<Int> = _kmTotali
 
+    // NUOVO STATO: Contiene il messaggio del suggerimento (es. "Tocca a Marco (Karma -50)")
+    private val _suggerimentoGuidatore = MutableStateFlow<String?>(null)
+    val suggerimentoGuidatore: StateFlow<String?> = _suggerimentoGuidatore
+
     fun loadUscita(gruppoId: String, uscitaId: String) {
         this.currentGruppoId = gruppoId
         this.currentUscitaId = uscitaId
 
         viewModelScope.launch {
-            // 1. Carichiamo il gruppo per sapere chi sono i membri
             val gruppo = gruppoRepository.getGruppoPerId(gruppoId)
             val tuttiAmici = amicoRepository.getTuttiGliAmici()
 
             if (gruppo != null) {
-                // Filtriamo: prendiamo solo gli amici i cui ID sono nel gruppo
                 _amiciDelGruppo.value = tuttiAmici.filter { gruppo.membriIds.contains(it.id) }
-
-                // Pre-selezioniamo tutti come partecipanti di default per comodità?
-                // Meglio di no, lasciamo scegliere all'utente.
             }
 
-            // 2. Se è una modifica, carichiamo i dati dell'uscita
             if (uscitaId.isNotEmpty()) {
                 val uscita = uscitaRepository.getUscitaPerId(uscitaId)
                 if (uscita != null) {
@@ -64,7 +65,6 @@ class UscitaViewModel(
                     _kmTotali.value = uscita.kmTotali
                 }
             } else {
-                // Reset per nuova uscita
                 _nomeUscita.value = ""
                 _partecipantiSelezionati.value = emptySet()
                 _guidatoriSelezionati.value = emptySet()
@@ -73,15 +73,12 @@ class UscitaViewModel(
         }
     }
 
-    fun onNomeUscitaChange(nuovoNome: String) {
-        _nomeUscita.value = nuovoNome
-    }
+    fun onNomeUscitaChange(nuovoNome: String) { _nomeUscita.value = nuovoNome }
 
     fun togglePartecipanteSelezionato(amicoId: String) {
         _partecipantiSelezionati.value = _partecipantiSelezionati.value.toMutableSet().apply {
             if (contains(amicoId)) {
                 remove(amicoId)
-                // Se rimuovi un partecipante, rimuovilo anche dai guidatori!
                 val nuoviGuidatori = _guidatoriSelezionati.value.toMutableSet()
                 nuoviGuidatori.remove(amicoId)
                 _guidatoriSelezionati.value = nuoviGuidatori
@@ -92,7 +89,6 @@ class UscitaViewModel(
     }
 
     fun toggleGuidatoreSelezionato(amicoId: String) {
-        // Puoi essere guidatore solo se sei partecipante
         if (_partecipantiSelezionati.value.contains(amicoId)) {
             _guidatoriSelezionati.value = _guidatoriSelezionati.value.toMutableSet().apply {
                 if (contains(amicoId)) remove(amicoId) else add(amicoId)
@@ -100,43 +96,58 @@ class UscitaViewModel(
         }
     }
 
-    fun setKmTotali(km: Int) {
-        _kmTotali.value = km
+    fun setKmTotali(km: Int) { _kmTotali.value = km }
+
+    // NUOVA FUNZIONE: Esegue l'algoritmo sui partecipanti attuali
+    fun calcolaSuggerimento() {
+        val amiciOggetti = _amiciDelGruppo.value
+        val partecipantiIds = _partecipantiSelezionati.value
+
+        if (partecipantiIds.isEmpty()) {
+            _suggerimentoGuidatore.value = "Seleziona almeno un partecipante!"
+            return
+        }
+
+        // Chiamiamo l'algoritmo che hai nel domain layer
+        val classifica = calcoloUseCase.calcolaChiGuida(amiciOggetti, partecipantiIds)
+
+        if (classifica.isNotEmpty()) {
+            val (prescelto, karma) = classifica.first()
+            _suggerimentoGuidatore.value = "Dovrebbe guidare: ${prescelto.nome}\n(Karma: ${String.format(Locale.US, "%.1f", karma)})"
+        } else {
+            _suggerimentoGuidatore.value = "Nessun dato disponibile per il calcolo."
+        }
+    }
+
+    // Funzione per chiudere il dialog resettando lo stato
+    fun resetSuggerimento() {
+        _suggerimentoGuidatore.value = null
     }
 
     fun salvaUscita(onSalvato: () -> Unit) {
         viewModelScope.launch {
-            val partecipantiIdsList = _partecipantiSelezionati.value.toList()
-            val guidatoriIdsList = _guidatoriSelezionati.value.toList()
+            val partecipantiList = _partecipantiSelezionati.value.toList()
+            val guidatoriList = _guidatoriSelezionati.value.toList()
 
-            // Aggiorniamo anche le statistiche degli amici (algoritmo live!)
-            // Nota: Questo è un approccio semplice. In una app complessa si gestisce lato backend.
-            // Qui lo facciamo per vedere subito i risultati.
             if (currentUscitaId.isEmpty()) {
-                // NUOVA USCITA
                 val nuovaUscita = Uscita(
-                    id = "", // Generato dal repo
+                    id = "",
                     nome = _nomeUscita.value,
                     gruppoId = currentGruppoId,
-                    partecipantiIds = partecipantiIdsList,
+                    partecipantiIds = partecipantiList,
                     kmTotali = _kmTotali.value,
-                    guidatoriIds = guidatoriIdsList
+                    guidatoriIds = guidatoriList
                 )
                 uscitaRepository.aggiungiUscita(nuovaUscita)
-
-                // Aggiorna statistiche amici (Km, Presenze)
-                aggiornaStatisticheAmici(partecipantiIdsList, guidatoriIdsList, _kmTotali.value)
-
+                aggiornaStatisticheAmici(partecipantiList, guidatoriList, _kmTotali.value)
             } else {
-                // MODIFICA (Attenzione: gestire le statistiche in modifica è complesso,
-                // per ora aggiorniamo solo l'uscita senza ricalcolare tutto lo storico per semplicità)
                 val uscitaAggiornata = Uscita(
                     id = currentUscitaId,
                     nome = _nomeUscita.value,
                     gruppoId = currentGruppoId,
-                    partecipantiIds = partecipantiIdsList,
+                    partecipantiIds = partecipantiList,
                     kmTotali = _kmTotali.value,
-                    guidatoriIds = guidatoriIdsList
+                    guidatoriIds = guidatoriList
                 )
                 uscitaRepository.aggiornaUscita(uscitaAggiornata)
             }
@@ -147,10 +158,7 @@ class UscitaViewModel(
     private fun aggiornaStatisticheAmici(partecipanti: List<String>, guidatori: List<String>, km: Int) {
         partecipanti.forEach { id ->
             val haGuidato = guidatori.contains(id)
-            // Se hanno guidato in più persone, dividiamo i km?
-            // Per ora assegniamo i km interi al guidatore principale o a tutti i guidatori (semplificazione)
             val kmGuidatiReali = if (haGuidato) km else 0
-
             amicoRepository.aggiornaStatisticheAmico(id, kmGuidatiReali, haGuidato)
         }
     }

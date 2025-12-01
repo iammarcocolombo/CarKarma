@@ -14,7 +14,6 @@ import it.col.mar.android.carkarma.data.database.AppContainer
 import it.col.mar.android.carkarma.presentation.amico.AmicoScreen
 import it.col.mar.android.carkarma.presentation.amico.AmicoViewModel
 import it.col.mar.android.carkarma.presentation.amico.AmicoViewModelFactory
-import it.col.mar.android.carkarma.presentation.calcolo.CalcoloScreen
 import it.col.mar.android.carkarma.presentation.gruppo.GruppoScreen
 import it.col.mar.android.carkarma.presentation.gruppo.GruppoViewModel
 import it.col.mar.android.carkarma.presentation.gruppo.GruppoViewModelFactory
@@ -59,7 +58,6 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
         }
 
         // MODIFICA GRUPPO (ID opzionale: se vuoto è nuovo)
-        // Usa la sintassi ?gruppoId={gruppoId} per i parametri opzionali
         composable(
             route = "modificaGruppo?gruppoId={gruppoId}",
             arguments = listOf(navArgument("gruppoId") {
@@ -84,7 +82,6 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
         }
 
         // USCITA (UscitaID opzionale)
-        // Esempio route: "uscita/123?uscitaId=456" (Modifica) o "uscita/123" (Nuova)
         composable(
             route = "uscita/{gruppoId}?uscitaId={uscitaId}",
             arguments = listOf(
@@ -115,7 +112,6 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
         }
 
         // DETTAGLIO AMICO (ID opzionale)
-        // Modificato per usare Query Param (?amicoId=) per coerenza con gli altri
         composable(
             route = "amico?amicoId={amicoId}",
             arguments = listOf(navArgument("amicoId") {
@@ -129,7 +125,5 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
             )
             AmicoScreen(navController, amicoId, viewModel)
         }
-
-        composable("calcolo") { CalcoloScreen(navController) }
     }
 }

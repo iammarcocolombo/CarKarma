@@ -8,14 +8,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 
@@ -37,7 +43,7 @@ import androidx.navigation.NavController
 fun UscitaScreen(
     navController: NavController,
     gruppoId: String,
-    uscitaId: String, // Stringa (vuota se nuova uscita)
+    uscitaId: String,
     viewModel: UscitaViewModel
 ) {
     LaunchedEffect(gruppoId, uscitaId) {
@@ -50,18 +56,14 @@ fun UscitaScreen(
     val guidatoriSelezionati by viewModel.guidatoriSelezionati.collectAsState()
     val kmTotali by viewModel.kmTotali.collectAsState()
 
-    // Stato locale per campi UI non ancora nel DB (Partenza/Arrivo)
-    var partenza by remember { mutableStateOf("") }
-    var arrivo by remember { mutableStateOf("") }
-    var showEliminaDialog by remember { mutableStateOf(false) }
+    // Stato per il dialog del suggerimento algoritmo
+    val suggerimento by viewModel.suggerimentoGuidatore.collectAsState()
 
+    var showEliminaDialog by remember { mutableStateOf(false) }
     val isEditing = uscitaId.isNotEmpty()
 
-    // Validazione semplice per abilitare il tasto salva
-    val isFormValid = nomeUscita.isNotBlank() &&
-            kmTotali > 0 &&
-            partecipantiSelezionati.isNotEmpty() &&
-            guidatoriSelezionati.isNotEmpty()
+    // Validazione base per abilitare il salvataggio
+    val isFormValid = nomeUscita.isNotBlank() && kmTotali > 0 && partecipantiSelezionati.isNotEmpty() && guidatoriSelezionati.isNotEmpty()
 
     Column(
         modifier = Modifier
@@ -85,60 +87,62 @@ fun UscitaScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Sezione Partecipanti
-        Text("Chi era presente?", style = MaterialTheme.typography.titleMedium)
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) {
+        // --- SEZIONE PARTECIPANTI ---
+        Text("Chi è presente?", style = MaterialTheme.typography.titleMedium)
+        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
             items(amiciDelGruppo) { amico ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth()
                         .clickable { viewModel.togglePartecipanteSelezionato(amico.id) }
-                        .padding(vertical = 4.dp)
+                        .padding(vertical = 0.dp)
                 ) {
                     Checkbox(
                         checked = partecipantiSelezionati.contains(amico.id),
                         onCheckedChange = { viewModel.togglePartecipanteSelezionato(amico.id) }
                     )
-                    Text(
-                        text = amico.nome,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+                    Text(text = amico.nome, style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Sezione Guidatori (filtrata: mostra solo chi è stato selezionato come partecipante)
-        // Se uno non c'era, non può aver guidato!
+        // --- BOTTONE CALCOLO (Tra le due liste) ---
+        // Visibile solo se c'è almeno un partecipante selezionato
         if (partecipantiSelezionati.isNotEmpty()) {
-            Text("Chi ha guidato?", style = MaterialTheme.typography.titleMedium)
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
+            OutlinedButton(
+                onClick = { viewModel.calcolaSuggerimento() },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.tertiary)
             ) {
-                // Mostriamo solo chi è tra i partecipanti
+                Icon(Icons.Default.Info, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Chi dovrebbe guidare?")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // --- SEZIONE GUIDATORI ---
+        if (partecipantiSelezionati.isNotEmpty()) {
+            Text("Chi ha guidato effettivamente?", style = MaterialTheme.typography.titleMedium)
+            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                // Filtriamo: mostriamo solo chi è stato selezionato come partecipante
                 val candidatiGuidatori = amiciDelGruppo.filter { partecipantiSelezionati.contains(it.id) }
 
                 items(candidatiGuidatori) { amico ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth()
                             .clickable { viewModel.toggleGuidatoreSelezionato(amico.id) }
-                            .padding(vertical = 4.dp)
+                            .padding(vertical = 0.dp)
                     ) {
                         Checkbox(
                             checked = guidatoriSelezionati.contains(amico.id),
                             onCheckedChange = { viewModel.toggleGuidatoreSelezionato(amico.id) }
                         )
-                        Text(amico.nome)
+                        Text(text = amico.nome)
                     }
                 }
             }
@@ -146,11 +150,10 @@ fun UscitaScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Input KM
+        // --- KM TOTALI ---
         OutlinedTextField(
             value = if (kmTotali == 0) "" else kmTotali.toString(),
             onValueChange = { text ->
-                // Accetta solo numeri
                 if (text.all { it.isDigit() }) {
                     viewModel.setKmTotali(text.toIntOrNull() ?: 0)
                 }
@@ -161,37 +164,13 @@ fun UscitaScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
         )
 
-        // Placeholder per integrazione futura Mappe
-        /*
-        Row(modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-                value = partenza, onValueChange = { partenza = it },
-                label = { Text("Partenza") }, modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            OutlinedTextField(
-                value = arrivo, onValueChange = { arrivo = it },
-                label = { Text("Arrivo") }, modifier = Modifier.weight(1f)
-            )
-        }
-        Button(onClick = { viewModel.setKmTotali(42) }, modifier = Modifier.fillMaxWidth()) {
-            Text("Calcola con Maps (Demo)")
-        }
-        */
-
         Spacer(modifier = Modifier.height(24.dp))
 
+        // --- BOTTONE SALVA ---
         Button(
-            onClick = {
-                viewModel.salvaUscita {
-                    navController.popBackStack()
-                }
-            },
-            enabled = isFormValid, // Disabilitato se mancano dati
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary
-            )
+            onClick = { viewModel.salvaUscita { navController.popBackStack() } },
+            enabled = isFormValid,
+            modifier = Modifier.fillMaxWidth()
         ) {
             Text("Salva Uscita")
         }
@@ -208,6 +187,29 @@ fun UscitaScreen(
         }
     }
 
+    // --- DIALOG PER IL SUGGERIMENTO ---
+    if (suggerimento != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.resetSuggerimento() },
+            title = { Text("L'algoritmo consiglia...") },
+            text = {
+                Text(
+                    text = suggerimento ?: "",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.resetSuggerimento() }) {
+                    Text("OK, Ho capito")
+                }
+            },
+            icon = { Icon(Icons.Default.Info, contentDescription = null) }
+        )
+    }
+
+    // --- DIALOG CONFERMA ELIMINAZIONE ---
     if (showEliminaDialog) {
         AlertDialog(
             onDismissRequest = { showEliminaDialog = false },
@@ -216,9 +218,7 @@ fun UscitaScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.eliminaUscita {
-                            navController.popBackStack()
-                        }
+                        viewModel.eliminaUscita { navController.popBackStack() }
                         showEliminaDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -227,9 +227,7 @@ fun UscitaScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEliminaDialog = false }) {
-                    Text("Annulla")
-                }
+                TextButton(onClick = { showEliminaDialog = false }) { Text("Annulla") }
             }
         )
     }
