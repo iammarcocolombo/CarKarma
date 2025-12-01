@@ -26,15 +26,18 @@ class GruppoViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
 
-    fun loadGruppo(gruppoId: Int) {
+    fun loadGruppo(gruppoId: String) {
         viewModelScope.launch {
-            if (gruppoId == -1) {
+            if (gruppoId.isEmpty()) {
                 _errorMessage.value = "ID gruppo non valido"
                 _gruppo.value = null
                 _uscite.value = emptyList()
                 return@launch
             }
+
+            // Usiamo i metodi aggiornati che accettano String
             val g = gruppoRepository.getGruppoPerId(gruppoId)
+
             if (g == null) {
                 _errorMessage.value = "Gruppo non trovato"
                 _gruppo.value = null
@@ -42,6 +45,7 @@ class GruppoViewModel(
             } else {
                 _errorMessage.value = null
                 _gruppo.value = g
+                // Carichiamo anche le uscite del gruppo
                 _uscite.value = uscitaRepository.getUscitePerGruppo(gruppoId)
             }
         }

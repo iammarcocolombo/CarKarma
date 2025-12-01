@@ -29,10 +29,10 @@ import androidx.navigation.NavController
 @Composable
 fun GruppoScreen(
     navController: NavController,
-    gruppoId: Int,
+    gruppoId: String,
     viewModel: GruppoViewModel
 ) {
-    LaunchedEffect(gruppoId, navController.currentBackStackEntry) {
+    LaunchedEffect(gruppoId) {
         viewModel.loadGruppo(gruppoId)
     }
 
@@ -42,11 +42,7 @@ fun GruppoScreen(
 
     if (errorMessage != null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                text = errorMessage ?: "",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error
-            )
+            Text(text = errorMessage ?: "", color = MaterialTheme.colorScheme.error)
         }
         return
     }
@@ -70,57 +66,48 @@ fun GruppoScreen(
         )
 
         Text(
-            text = "${gruppo!!.amici.size} componenti",
+            text = "${gruppo!!.membriIds.size} componenti",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        LazyColumn(
-            modifier = Modifier.weight(1f)
-        ) {
+        LazyColumn(modifier = Modifier.weight(1f)) {
             items(uscite) { uscita ->
                 UscitaCard(
                     uscita = uscita,
-                    onClick = {
-                        navController.navigate("uscita/${gruppoId}/${uscita.id}")
-                    }
+                    // CORRETTO: Parametri query per l'uscita
+                    onClick = { navController.navigate("uscita/${gruppoId}?uscitaId=${uscita.id}") }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
 
         Button(
-            onClick = { navController.navigate("uscita/${gruppoId}/-1") },
+            // CORRETTO: Nuova uscita (senza ID opzionale)
+            onClick = { navController.navigate("uscita/${gruppoId}") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
-            Text(
-                "Nuova Uscita",
-                color = MaterialTheme.colorScheme.onPrimary
-            )
+            Text("Nuova Uscita", color = MaterialTheme.colorScheme.onPrimary)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
         Button(
-            onClick = { navController.navigate("modificaGruppo/${gruppo!!.id}") },
+            // CORRETTO: Modifica gruppo usa Query Param (?gruppoId=...)
+            onClick = { navController.navigate("modificaGruppo?gruppoId=${gruppo!!.id}") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
         ) {
-            Text(
-                "Modifica Gruppo",
-                color = MaterialTheme.colorScheme.onSecondary
-            )
+            Text("Modifica Gruppo", color = MaterialTheme.colorScheme.onSecondary)
         }
     }
 }
-
-
 
 @Composable
 fun UscitaCard(uscita: it.col.mar.android.carkarma.data.model.Uscita, onClick: () -> Unit) {
@@ -128,22 +115,12 @@ fun UscitaCard(uscita: it.col.mar.android.carkarma.data.model.Uscita, onClick: (
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = uscita.nome,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = "Km totali: ${uscita.kmTotali}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(text = uscita.nome, style = MaterialTheme.typography.titleMedium)
+            Text(text = "Km totali: ${uscita.kmTotali}", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

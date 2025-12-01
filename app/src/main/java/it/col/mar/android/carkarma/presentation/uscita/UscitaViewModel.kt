@@ -3,6 +3,7 @@ package it.col.mar.android.carkarma.presentation.uscita
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.col.mar.android.carkarma.data.database.AmicoRepository
+import it.col.mar.android.carkarma.data.database.GruppoRepository
 import it.col.mar.android.carkarma.data.database.UscitaRepository
 import it.col.mar.android.carkarma.data.model.Amico
 import it.col.mar.android.carkarma.data.model.Uscita
@@ -12,42 +13,62 @@ import kotlinx.coroutines.launch
 
 class UscitaViewModel(
     private val uscitaRepository: UscitaRepository,
-    private val amicoRepository: AmicoRepository
+    private val amicoRepository: AmicoRepository,
+    private val gruppoRepository: GruppoRepository // Aggiunto per filtrare gli amici
 ) : ViewModel() {
 
-    private var uscitaId: Int = -1
-    private var gruppoId: Int = -1
+    private var currentUscitaId: String = ""
+    private var currentGruppoId: String = ""
 
     private val _nomeUscita = MutableStateFlow("")
     val nomeUscita: StateFlow<String> = _nomeUscita
 
-    private val _amiciDisponibili = MutableStateFlow<List<Amico>>(emptyList())
-    val amiciDisponibili: StateFlow<List<Amico>> = _amiciDisponibili
+    // Lista filtrata: solo gli amici che appartengono a questo gruppo
+    private val _amiciDelGruppo = MutableStateFlow<List<Amico>>(emptyList())
+    val amiciDelGruppo: StateFlow<List<Amico>> = _amiciDelGruppo
 
-    private val _partecipantiSelezionati = MutableStateFlow<Set<Int>>(emptySet())
-    val partecipantiSelezionati: StateFlow<Set<Int>> = _partecipantiSelezionati
+    // Set di ID String
+    private val _partecipantiSelezionati = MutableStateFlow<Set<String>>(emptySet())
+    val partecipantiSelezionati: StateFlow<Set<String>> = _partecipantiSelezionati
 
-    private val _guidatoriSelezionati = MutableStateFlow<Set<Int>>(emptySet())
-    val guidatoriSelezionati: StateFlow<Set<Int>> = _guidatoriSelezionati
+    private val _guidatoriSelezionati = MutableStateFlow<Set<String>>(emptySet())
+    val guidatoriSelezionati: StateFlow<Set<String>> = _guidatoriSelezionati
 
     private val _kmTotali = MutableStateFlow(0)
     val kmTotali: StateFlow<Int> = _kmTotali
 
-    fun loadUscita(gruppoId: Int, uscitaId: Int) {
-        this.gruppoId = gruppoId
-        this.uscitaId = uscitaId
+    fun loadUscita(gruppoId: String, uscitaId: String) {
+        this.currentGruppoId = gruppoId
+        this.currentUscitaId = uscitaId
 
         viewModelScope.launch {
-            _amiciDisponibili.value = amicoRepository.getTuttiGliAmici()
+            // 1. Carichiamo il gruppo per sapere chi sono i membri
+            val gruppo = gruppoRepository.getGruppoPerId(gruppoId)
+            val tuttiAmici = amicoRepository.getTuttiGliAmici()
 
-            if (uscitaId != -1) {
+            if (gruppo != null) {
+                // Filtriamo: prendiamo solo gli amici i cui ID sono nel gruppo
+                _amiciDelGruppo.value = tuttiAmici.filter { gruppo.membriIds.contains(it.id) }
+
+                // Pre-selezioniamo tutti come partecipanti di default per comodità?
+                // Meglio di no, lasciamo scegliere all'utente.
+            }
+
+            // 2. Se è una modifica, carichiamo i dati dell'uscita
+            if (uscitaId.isNotEmpty()) {
                 val uscita = uscitaRepository.getUscitaPerId(uscitaId)
                 if (uscita != null) {
                     _nomeUscita.value = uscita.nome
-                    _partecipantiSelezionati.value = uscita.partecipanti.map { it.id }.toSet()
-                    _guidatoriSelezionati.value = uscita.guidatori.map { it.id }.toSet()
+                    _partecipantiSelezionati.value = uscita.partecipantiIds.toSet()
+                    _guidatoriSelezionati.value = uscita.guidatoriIds.toSet()
                     _kmTotali.value = uscita.kmTotali
                 }
+            } else {
+                // Reset per nuova uscita
+                _nomeUscita.value = ""
+                _partecipantiSelezionati.value = emptySet()
+                _guidatoriSelezionati.value = emptySet()
+                _kmTotali.value = 0
             }
         }
     }
@@ -56,15 +77,26 @@ class UscitaViewModel(
         _nomeUscita.value = nuovoNome
     }
 
-    fun togglePartecipanteSelezionato(amicoId: Int) {
+    fun togglePartecipanteSelezionato(amicoId: String) {
         _partecipantiSelezionati.value = _partecipantiSelezionati.value.toMutableSet().apply {
-            if (contains(amicoId)) remove(amicoId) else add(amicoId)
+            if (contains(amicoId)) {
+                remove(amicoId)
+                // Se rimuovi un partecipante, rimuovilo anche dai guidatori!
+                val nuoviGuidatori = _guidatoriSelezionati.value.toMutableSet()
+                nuoviGuidatori.remove(amicoId)
+                _guidatoriSelezionati.value = nuoviGuidatori
+            } else {
+                add(amicoId)
+            }
         }
     }
 
-    fun toggleGuidatoreSelezionato(amicoId: Int) {
-        _guidatoriSelezionati.value = _guidatoriSelezionati.value.toMutableSet().apply {
-            if (contains(amicoId)) remove(amicoId) else add(amicoId)
+    fun toggleGuidatoreSelezionato(amicoId: String) {
+        // Puoi essere guidatore solo se sei partecipante
+        if (_partecipantiSelezionati.value.contains(amicoId)) {
+            _guidatoriSelezionati.value = _guidatoriSelezionati.value.toMutableSet().apply {
+                if (contains(amicoId)) remove(amicoId) else add(amicoId)
+            }
         }
     }
 
@@ -74,42 +106,61 @@ class UscitaViewModel(
 
     fun salvaUscita(onSalvato: () -> Unit) {
         viewModelScope.launch {
-            val partecipantiList = _amiciDisponibili.value.filter { _partecipantiSelezionati.value.contains(it.id) }
-            val guidatoriList = _amiciDisponibili.value.filter { _guidatoriSelezionati.value.contains(it.id) }
+            val partecipantiIdsList = _partecipantiSelezionati.value.toList()
+            val guidatoriIdsList = _guidatoriSelezionati.value.toList()
 
-            if (uscitaId == -1) {
-                // Nuova uscita
+            // Aggiorniamo anche le statistiche degli amici (algoritmo live!)
+            // Nota: Questo è un approccio semplice. In una app complessa si gestisce lato backend.
+            // Qui lo facciamo per vedere subito i risultati.
+            if (currentUscitaId.isEmpty()) {
+                // NUOVA USCITA
                 val nuovaUscita = Uscita(
-                    id = uscitaRepository.generaNuovoId(),
+                    id = "", // Generato dal repo
                     nome = _nomeUscita.value,
-                    gruppoId = gruppoId,
-                    partecipanti = partecipantiList,
+                    gruppoId = currentGruppoId,
+                    partecipantiIds = partecipantiIdsList,
                     kmTotali = _kmTotali.value,
-                    guidatori = guidatoriList
+                    guidatoriIds = guidatoriIdsList
                 )
                 uscitaRepository.aggiungiUscita(nuovaUscita)
+
+                // Aggiorna statistiche amici (Km, Presenze)
+                aggiornaStatisticheAmici(partecipantiIdsList, guidatoriIdsList, _kmTotali.value)
+
             } else {
-                // Modifica uscita esistente
+                // MODIFICA (Attenzione: gestire le statistiche in modifica è complesso,
+                // per ora aggiorniamo solo l'uscita senza ricalcolare tutto lo storico per semplicità)
                 val uscitaAggiornata = Uscita(
-                    id = uscitaId,
+                    id = currentUscitaId,
                     nome = _nomeUscita.value,
-                    gruppoId = gruppoId,
-                    partecipanti = partecipantiList,
+                    gruppoId = currentGruppoId,
+                    partecipantiIds = partecipantiIdsList,
                     kmTotali = _kmTotali.value,
-                    guidatori = guidatoriList
+                    guidatoriIds = guidatoriIdsList
                 )
                 uscitaRepository.aggiornaUscita(uscitaAggiornata)
             }
             onSalvato()
         }
     }
+
+    private fun aggiornaStatisticheAmici(partecipanti: List<String>, guidatori: List<String>, km: Int) {
+        partecipanti.forEach { id ->
+            val haGuidato = guidatori.contains(id)
+            // Se hanno guidato in più persone, dividiamo i km?
+            // Per ora assegniamo i km interi al guidatore principale o a tutti i guidatori (semplificazione)
+            val kmGuidatiReali = if (haGuidato) km else 0
+
+            amicoRepository.aggiornaStatisticheAmico(id, kmGuidatiReali, haGuidato)
+        }
+    }
+
     fun eliminaUscita(onEliminato: () -> Unit) {
         viewModelScope.launch {
-            if (uscitaId != -1) {
-                uscitaRepository.eliminaUscita(uscitaId)
+            if (currentUscitaId.isNotEmpty()) {
+                uscitaRepository.eliminaUscita(currentUscitaId)
             }
             onEliminato()
         }
     }
-
 }

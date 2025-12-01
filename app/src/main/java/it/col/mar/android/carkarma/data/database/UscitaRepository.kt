@@ -1,71 +1,100 @@
 package it.col.mar.android.carkarma.data.database
 
-import it.col.mar.android.carkarma.data.model.Amico
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.toObjects
 import it.col.mar.android.carkarma.data.model.Uscita
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.UUID
 
-class UscitaRepository {
-
+class UscitaRepository(
+    private val db: FirebaseFirestore,
+    private val auth: FirebaseAuth
+) {
+    // Flow che contiene la lista aggiornata in tempo reale delle uscite
     private val _uscite = MutableStateFlow<List<Uscita>>(emptyList())
     val uscite: StateFlow<List<Uscita>> = _uscite.asStateFlow()
 
     init {
-        val amico1 = Amico(1, "Marco", 2, 5, 3, 300)
-        val amico2 = Amico(2, "Luca", 1, 3, 2, 200)
-
-        val iniziali = listOf(
-            Uscita(
-                id = 1,
-                nome = "Gita al Lago",
-                gruppoId = 1,
-                partecipanti = listOf(amico1, amico2),
-                kmTotali = 120,
-                guidatori = listOf(amico1)
-            ),
-            Uscita(
-                id = 2,
-                nome = "Weekend in Montagna",
-                gruppoId = 1,
-                partecipanti = listOf(amico1),
-                kmTotali = 200,
-                guidatori = listOf(amico1)
-            )
-        )
-
-        _uscite.value = iniziali
+        // ASCOLTO TEMPO REALE
+        // Collega l'app alla collezione "uscite" su Firebase.
+        // Ogni volta che qualcuno aggiunge un'uscita, questa lista si aggiorna automaticamente.
+        db.collection("uscite")
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    // Gestione errore silenziosa per ora
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    // Converte i documenti JSON di Firebase in oggetti Uscita Kotlin
+                    _uscite.value = snapshot.toObjects<Uscita>()
+                }
+            }
     }
 
+    /**
+     * Restituisce tutte le uscite scaricate.
+     */
     fun getTutteLeUscite(): List<Uscita> = _uscite.value
 
-    fun aggiungiUscita(uscita: Uscita) {
-        _uscite.value = _uscite.value + uscita
-    }
-
-    fun aggiornaUscita(uscita: Uscita) {
-        _uscite.value = _uscite.value.map {
-            if (it.id == uscita.id) uscita else it
-        }
-    }
-
-    fun eliminaUscita(uscitaId: Int) {
-        _uscite.value = _uscite.value.filterNot { it.id == uscitaId }
-    }
-
-    fun getUscitePerGruppo(gruppoId: Int): List<Uscita> {
+    /**
+     * Filtra le uscite locali per trovare quelle di uno specifico gruppo.
+     */
+    fun getUscitePerGruppo(gruppoId: String): List<Uscita> {
         return _uscite.value.filter { it.gruppoId == gruppoId }
     }
 
-    fun getUscitaPerId(id: Int): Uscita? {
+    /**
+     * Cerca un'uscita specifica per ID.
+     */
+    fun getUscitaPerId(id: String): Uscita? {
         return _uscite.value.find { it.id == id }
     }
 
-    fun eliminaUscitePerGruppo(gruppoId: Int) {
-        _uscite.value = _uscite.value.filterNot { it.gruppoId == gruppoId }
+    /**
+     * Salva una nuova uscita o ne aggiorna una esistente su Firebase.
+     */
+    fun aggiungiUscita(uscita: Uscita) {
+        // Se l'ID è vuoto, è una nuova uscita -> generiamo un UUID
+        val idFinale = if (uscita.id.isEmpty()) UUID.randomUUID().toString() else uscita.id
+
+        // Assicuriamoci che l'oggetto da salvare abbia l'ID corretto
+        val uscitaDaSalvare = uscita.copy(id = idFinale)
+
+        // Scrittura su Firestore (path: uscite/{idFinale})
+        db.collection("uscite").document(idFinale).set(uscitaDaSalvare)
     }
 
-    fun generaNuovoId(): Int {
-        return (_uscite.value.maxOfOrNull { it.id } ?: 0) + 1
+    /**
+     * Aggiorna un'uscita (in Firestore è uguale ad aggiungi/sovrascrivi).
+     */
+    fun aggiornaUscita(uscita: Uscita) {
+        aggiungiUscita(uscita)
+    }
+
+    /**
+     * Elimina un'uscita dal database.
+     */
+    fun eliminaUscita(uscitaId: String) {
+        db.collection("uscite").document(uscitaId).delete()
+    }
+
+    /**
+     * Elimina tutte le uscite associate a un gruppo.
+     * Nota: Firestore non supporta l'eliminazione "per query" direttamente dal client in modo semplice.
+     * Iteriamo sui documenti locali e li cancelliamo uno per uno.
+     */
+    fun eliminaUscitePerGruppo(gruppoId: String) {
+        val usciteDaEliminare = _uscite.value.filter { it.gruppoId == gruppoId }
+        for (uscita in usciteDaEliminare) {
+            eliminaUscita(uscita.id)
+        }
+    }
+
+    // Helper per compatibilità, anche se ora generiamo l'ID in aggiungiUscita
+    fun generaNuovoId(): String {
+        return UUID.randomUUID().toString()
     }
 }

@@ -18,26 +18,32 @@ class ModificaGruppoViewModel(
     private val _nomeGruppo = MutableStateFlow("")
     val nomeGruppo: StateFlow<String> = _nomeGruppo
 
-    private val _amiciDisponibili = MutableStateFlow<List<Amico>>(emptyList())
-    val amiciDisponibili: StateFlow<List<Amico>> = _amiciDisponibili
+    // CORREZIONE: Colleghiamo direttamente il flusso del repository.
+    // In questo modo, qualsiasi cambiamento nel DB (anche se aggiungi un amico da un'altra parte)
+    // si riflette immediatamente qui senza bisogno di init o reload manuali.
+    val amiciDisponibili: StateFlow<List<Amico>> = amicoRepository.amici
 
-    private val _amiciSelezionati = MutableStateFlow<Set<Int>>(emptySet())
-    val amiciSelezionati: StateFlow<Set<Int>> = _amiciSelezionati
+    // Set degli ID degli amici selezionati
+    private val _amiciSelezionati = MutableStateFlow<Set<String>>(emptySet())
+    val amiciSelezionati: StateFlow<Set<String>> = _amiciSelezionati
 
-    private var gruppoId: Int = -1
+    private var currentGruppoId: String = ""
 
-    fun loadGruppo(gruppoId: Int) {
-        this.gruppoId = gruppoId
+    fun loadGruppo(gruppoId: String) {
+        this.currentGruppoId = gruppoId
         viewModelScope.launch {
-            // carica tutti gli amici disponibili
-            _amiciDisponibili.value = amicoRepository.getTuttiGliAmici()
-
-            if (gruppoId != -1) {
+            // Se stiamo modificando, carica i dati del gruppo
+            if (gruppoId.isNotEmpty()) {
                 val gruppo = gruppoRepository.getGruppoPerId(gruppoId)
                 if (gruppo != null) {
                     _nomeGruppo.value = gruppo.nome
-                    _amiciSelezionati.value = gruppo.amici.map { it.id }.toSet()
+                    // Importante: In Gruppo ora abbiamo membriIds (List<String>)
+                    _amiciSelezionati.value = gruppo.membriIds.toSet()
                 }
+            } else {
+                // Nuovo gruppo: resetta i campi
+                _nomeGruppo.value = ""
+                _amiciSelezionati.value = emptySet()
             }
         }
     }
@@ -46,7 +52,7 @@ class ModificaGruppoViewModel(
         _nomeGruppo.value = nuovoNome
     }
 
-    fun toggleAmicoSelezionato(amicoId: Int) {
+    fun toggleAmicoSelezionato(amicoId: String) {
         _amiciSelezionati.value = _amiciSelezionati.value.toMutableSet().apply {
             if (contains(amicoId)) remove(amicoId) else add(amicoId)
         }
@@ -54,34 +60,36 @@ class ModificaGruppoViewModel(
 
     fun salvaGruppo(onSalvato: () -> Unit) {
         viewModelScope.launch {
-            val amiciSelezionatiList = _amiciDisponibili.value.filter { _amiciSelezionati.value.contains(it.id) }
-            if (gruppoId == -1) {
-                // nuovo gruppo
+            // Prendiamo gli ID selezionati
+            val listaMembriIds = _amiciSelezionati.value.toList()
+
+            if (currentGruppoId.isEmpty()) {
+                // NUOVO GRUPPO
                 val nuovoGruppo = Gruppo(
-                    id = gruppoRepository.generaNuovoId(),
+                    id = "",
                     nome = _nomeGruppo.value,
-                    amici = amiciSelezionatiList
+                    membriIds = listaMembriIds
                 )
                 gruppoRepository.aggiungiGruppo(nuovoGruppo)
             } else {
-                // aggiorna esistente
+                // MODIFICA ESISTENTE
                 val gruppoAggiornato = Gruppo(
-                    id = gruppoId,
+                    id = currentGruppoId,
                     nome = _nomeGruppo.value,
-                    amici = amiciSelezionatiList
+                    membriIds = listaMembriIds
                 )
                 gruppoRepository.aggiornaGruppo(gruppoAggiornato)
             }
             onSalvato()
         }
     }
+
     fun eliminaGruppo(onEliminato: () -> Unit) {
         viewModelScope.launch {
-            if (gruppoId != -1) {
-                gruppoRepository.eliminaGruppo(gruppoId)
+            if (currentGruppoId.isNotEmpty()) {
+                gruppoRepository.eliminaGruppo(currentGruppoId)
             }
             onEliminato()
         }
     }
-
 }

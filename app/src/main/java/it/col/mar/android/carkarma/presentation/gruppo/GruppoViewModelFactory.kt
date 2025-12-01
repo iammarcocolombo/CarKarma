@@ -12,6 +12,7 @@ class GruppoViewModelFactory(
     private val uscitaRepository: UscitaRepository
 ) : ViewModelProvider.Factory {
 
+    @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(GruppoViewModel::class.java)) {
             return GruppoViewModel(

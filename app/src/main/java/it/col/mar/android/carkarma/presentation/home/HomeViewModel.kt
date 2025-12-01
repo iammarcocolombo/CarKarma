@@ -9,9 +9,10 @@ class HomeViewModel(
     private val repository: GruppoRepository
 ) : ViewModel() {
 
-    // Qui direttamente il flow dal repository
+    // Espone direttamente il flow dal repository
     val gruppi: StateFlow<List<Gruppo>> = repository.gruppi
 
+    // Funzione helper per aggiungere (anche se di solito si fa dalla schermata di modifica)
     fun aggiungiGruppo(gruppo: Gruppo) {
         repository.aggiungiGruppo(gruppo)
     }

@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import it.col.mar.android.carkarma.data.database.AppContainer
 import it.col.mar.android.carkarma.data.model.Gruppo
 
 @Composable
@@ -31,7 +32,7 @@ fun HomeScreen(
     navController: NavHostController
 ) {
     val viewModel: HomeViewModel = viewModel(
-        factory = HomeViewModelFactory(it.col.mar.android.carkarma.data.database.AppContainer.gruppoRepository)
+        factory = HomeViewModelFactory(AppContainer.gruppoRepository)
     )
 
     val gruppi by viewModel.gruppi.collectAsState()
@@ -41,7 +42,6 @@ fun HomeScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Titolo centrato
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -55,7 +55,6 @@ fun HomeScreen(
             )
         }
 
-        // Titolo più piccolo e centrato
         Text(
             text = "I tuoi Gruppi",
             style = MaterialTheme.typography.headlineSmall,
@@ -69,7 +68,11 @@ fun HomeScreen(
             modifier = Modifier.weight(1f)
         ) {
             items(gruppi) { gruppo ->
-                GruppoCard(gruppo = gruppo, onClick = { navController.navigate("gruppo/${gruppo.id}") })
+                GruppoCard(
+                    gruppo = gruppo,
+                    // LINK CORRETTO: Passiamo l'ID come parametro path (GruppoScreen usa ancora il path diretto)
+                    onClick = { navController.navigate("gruppo/${gruppo.id}") }
+                )
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
@@ -77,7 +80,9 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = { navController.navigate("modificaGruppo/-1") },  // naviga con id -1
+            // CORREZIONE CRASH: Rimosso lo slash finale "/"
+            // Ora corrisponde esattamente alla rotta "modificaGruppo?gruppoId={...}"
+            onClick = { navController.navigate("modificaGruppo") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -91,7 +96,6 @@ fun HomeScreen(
                 style = MaterialTheme.typography.labelLarge
             )
         }
-
     }
 }
 
@@ -115,8 +119,9 @@ fun GruppoCard(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface
             )
+            // MembriIds invece di amici
             Text(
-                text = "${gruppo.amici.size} amici",
+                text = "${gruppo.membriIds.size} amici",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

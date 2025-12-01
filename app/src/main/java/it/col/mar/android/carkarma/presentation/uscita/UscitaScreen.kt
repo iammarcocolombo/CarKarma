@@ -10,12 +10,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -25,14 +28,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 
 @Composable
 fun UscitaScreen(
     navController: NavController,
-    gruppoId: Int,
-    uscitaId: Int,
+    gruppoId: String,
+    uscitaId: String, // Stringa (vuota se nuova uscita)
     viewModel: UscitaViewModel
 ) {
     LaunchedEffect(gruppoId, uscitaId) {
@@ -40,37 +45,54 @@ fun UscitaScreen(
     }
 
     val nomeUscita by viewModel.nomeUscita.collectAsState()
-    val amiciDisponibili by viewModel.amiciDisponibili.collectAsState()
+    val amiciDelGruppo by viewModel.amiciDelGruppo.collectAsState()
     val partecipantiSelezionati by viewModel.partecipantiSelezionati.collectAsState()
     val guidatoriSelezionati by viewModel.guidatoriSelezionati.collectAsState()
     val kmTotali by viewModel.kmTotali.collectAsState()
 
+    // Stato locale per campi UI non ancora nel DB (Partenza/Arrivo)
     var partenza by remember { mutableStateOf("") }
     var arrivo by remember { mutableStateOf("") }
     var showEliminaDialog by remember { mutableStateOf(false) }
 
+    val isEditing = uscitaId.isNotEmpty()
+
+    // Validazione semplice per abilitare il tasto salva
+    val isFormValid = nomeUscita.isNotBlank() &&
+            kmTotali > 0 &&
+            partecipantiSelezionati.isNotEmpty() &&
+            guidatoriSelezionati.isNotEmpty()
 
     Column(
         modifier = Modifier
             .padding(16.dp)
             .fillMaxSize()
     ) {
+        Text(
+            text = if (isEditing) "Modifica Uscita" else "Nuova Uscita",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
         OutlinedTextField(
             value = nomeUscita,
             onValueChange = { viewModel.onNomeUscitaChange(it) },
-            label = { Text("Nome Uscita") },
-            modifier = Modifier.fillMaxWidth()
+            label = { Text("Descrizione (es. Gita al Lago)") },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text("Partecipanti:", style = MaterialTheme.typography.titleMedium)
+        // Sezione Partecipanti
+        Text("Chi era presente?", style = MaterialTheme.typography.titleMedium)
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            items(amiciDisponibili) { amico ->
+            items(amiciDelGruppo) { amico ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -82,76 +104,82 @@ fun UscitaScreen(
                         checked = partecipantiSelezionati.contains(amico.id),
                         onCheckedChange = { viewModel.togglePartecipanteSelezionato(amico.id) }
                     )
-                    Text(amico.nome)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text("Guidatori:", style = MaterialTheme.typography.titleMedium)
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) {
-            items(amiciDisponibili) { amico ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { viewModel.toggleGuidatoreSelezionato(amico.id) }
-                        .padding(vertical = 4.dp)
-                ) {
-                    Checkbox(
-                        checked = guidatoriSelezionati.contains(amico.id),
-                        onCheckedChange = { viewModel.toggleGuidatoreSelezionato(amico.id) }
+                    Text(
+                        text = amico.nome,
+                        style = MaterialTheme.typography.bodyLarge
                     )
-                    Text(amico.nome)
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Sezione Guidatori (filtrata: mostra solo chi è stato selezionato come partecipante)
+        // Se uno non c'era, non può aver guidato!
+        if (partecipantiSelezionati.isNotEmpty()) {
+            Text("Chi ha guidato?", style = MaterialTheme.typography.titleMedium)
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                // Mostriamo solo chi è tra i partecipanti
+                val candidatiGuidatori = amiciDelGruppo.filter { partecipantiSelezionati.contains(it.id) }
+
+                items(candidatiGuidatori) { amico ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.toggleGuidatoreSelezionato(amico.id) }
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Checkbox(
+                            checked = guidatoriSelezionati.contains(amico.id),
+                            onCheckedChange = { viewModel.toggleGuidatoreSelezionato(amico.id) }
+                        )
+                        Text(amico.nome)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Input KM
         OutlinedTextField(
-            value = kmTotali.toString(),
+            value = if (kmTotali == 0) "" else kmTotali.toString(),
             onValueChange = { text ->
-                text.toIntOrNull()?.let { viewModel.setKmTotali(it) }
+                // Accetta solo numeri
+                if (text.all { it.isDigit() }) {
+                    viewModel.setKmTotali(text.toIntOrNull() ?: 0)
+                }
             },
             label = { Text("Km Totali") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            enabled = false
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = partenza,
-            onValueChange = { partenza = it },
-            label = { Text("Punto di Partenza") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        OutlinedTextField(
-            value = arrivo,
-            onValueChange = { arrivo = it },
-            label = { Text("Punto di Arrivo") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Button(onClick = {
-            // TODO: qui integri API Google Maps per calcolare km
-            val kmSimulati = 42
-            viewModel.setKmTotali(kmSimulati)
-        }, modifier = Modifier.fillMaxWidth()) {
-            Text("Calcola Km Totali")
+        // Placeholder per integrazione futura Mappe
+        /*
+        Row(modifier = Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = partenza, onValueChange = { partenza = it },
+                label = { Text("Partenza") }, modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            OutlinedTextField(
+                value = arrivo, onValueChange = { arrivo = it },
+                label = { Text("Arrivo") }, modifier = Modifier.weight(1f)
+            )
         }
+        Button(onClick = { viewModel.setKmTotali(42) }, modifier = Modifier.fillMaxWidth()) {
+            Text("Calcola con Maps (Demo)")
+        }
+        */
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = {
@@ -159,45 +187,50 @@ fun UscitaScreen(
                     navController.popBackStack()
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            enabled = isFormValid, // Disabilitato se mancano dati
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary
+            )
         ) {
             Text("Salva Uscita")
         }
-        if (uscitaId != -1) {
-            Spacer(modifier = Modifier.height(16.dp))
 
-            Button(
+        if (isEditing) {
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(
                 onClick = { showEliminaDialog = true },
                 modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
                 Text("Elimina Uscita")
             }
         }
-
     }
+
     if (showEliminaDialog) {
         AlertDialog(
             onDismissRequest = { showEliminaDialog = false },
-            title = { Text("Conferma eliminazione") },
-            text = { Text("Sei sicuro di voler eliminare questa uscita? L'operazione non è reversibile.") },
+            title = { Text("Eliminare l'uscita?") },
+            text = { Text("Questa operazione annullerà i km registrati per questo viaggio.") },
             confirmButton = {
                 Button(
                     onClick = {
-                        showEliminaDialog = false
                         viewModel.eliminaUscita {
                             navController.popBackStack()
                         }
-                    }
+                        showEliminaDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Elimina")
                 }
             },
             dismissButton = {
-                Button(onClick = { showEliminaDialog = false }) {
+                TextButton(onClick = { showEliminaDialog = false }) {
                     Text("Annulla")
                 }
             }
         )
     }
-
 }

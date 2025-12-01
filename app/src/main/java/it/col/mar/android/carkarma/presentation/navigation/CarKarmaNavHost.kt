@@ -11,6 +11,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import it.col.mar.android.carkarma.data.database.AppContainer
+import it.col.mar.android.carkarma.presentation.amico.AmicoScreen
+import it.col.mar.android.carkarma.presentation.amico.AmicoViewModel
+import it.col.mar.android.carkarma.presentation.amico.AmicoViewModelFactory
 import it.col.mar.android.carkarma.presentation.calcolo.CalcoloScreen
 import it.col.mar.android.carkarma.presentation.gruppo.GruppoScreen
 import it.col.mar.android.carkarma.presentation.gruppo.GruppoViewModel
@@ -23,7 +26,6 @@ import it.col.mar.android.carkarma.presentation.uscita.UscitaScreen
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModel
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModelFactory
 
-
 @Composable
 fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValues) {
     NavHost(
@@ -31,13 +33,15 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
         startDestination = "home",
         modifier = Modifier.padding(paddingValues)
     ) {
+        // HOME
         composable("home") { HomeScreen(navController) }
 
+        // DETTAGLIO GRUPPO (ID obbligatorio)
         composable(
             route = "gruppo/{gruppoId}",
-            arguments = listOf(navArgument("gruppoId") { type = NavType.IntType })
+            arguments = listOf(navArgument("gruppoId") { type = NavType.StringType })
         ) { backStackEntry ->
-            val gruppoId = backStackEntry.arguments?.getInt("gruppoId") ?: -1
+            val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
 
             val viewModel: GruppoViewModel = viewModel(
                 factory = GruppoViewModelFactory(
@@ -54,14 +58,16 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
             )
         }
 
+        // MODIFICA GRUPPO (ID opzionale: se vuoto è nuovo)
+        // Usa la sintassi ?gruppoId={gruppoId} per i parametri opzionali
         composable(
-            "modificaGruppo/{gruppoId}",
+            route = "modificaGruppo?gruppoId={gruppoId}",
             arguments = listOf(navArgument("gruppoId") {
-                type = NavType.IntType
-                defaultValue = -1
+                type = NavType.StringType
+                defaultValue = "" // Stringa vuota = Nuovo Gruppo
             })
         ) { backStackEntry ->
-            val gruppoId = backStackEntry.arguments?.getInt("gruppoId") ?: -1
+            val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
 
             val viewModel: ModificaGruppoViewModel = viewModel(
                 factory = ModificaGruppoViewModelFactory(
@@ -77,20 +83,26 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
             )
         }
 
+        // USCITA (UscitaID opzionale)
+        // Esempio route: "uscita/123?uscitaId=456" (Modifica) o "uscita/123" (Nuova)
         composable(
-            "uscita/{gruppoId}/{uscitaId}",
+            route = "uscita/{gruppoId}?uscitaId={uscitaId}",
             arguments = listOf(
-                navArgument("gruppoId") { type = NavType.IntType },
-                navArgument("uscitaId") { type = NavType.IntType; defaultValue = -1 } // -1 = nuova uscita
+                navArgument("gruppoId") { type = NavType.StringType },
+                navArgument("uscitaId") {
+                    type = NavType.StringType
+                    defaultValue = "" // Stringa vuota = Nuova Uscita
+                }
             )
         ) { backStackEntry ->
-            val gruppoId = backStackEntry.arguments?.getInt("gruppoId") ?: -1
-            val uscitaId = backStackEntry.arguments?.getInt("uscitaId") ?: -1
+            val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
+            val uscitaId = backStackEntry.arguments?.getString("uscitaId") ?: ""
 
             val viewModel: UscitaViewModel = viewModel(
                 factory = UscitaViewModelFactory(
                     AppContainer.uscitaRepository,
-                    AppContainer.amicoRepository
+                    AppContainer.amicoRepository,
+                    AppContainer.gruppoRepository
                 )
             )
 
@@ -100,6 +112,22 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
                 uscitaId = uscitaId,
                 viewModel = viewModel
             )
+        }
+
+        // DETTAGLIO AMICO (ID opzionale)
+        // Modificato per usare Query Param (?amicoId=) per coerenza con gli altri
+        composable(
+            route = "amico?amicoId={amicoId}",
+            arguments = listOf(navArgument("amicoId") {
+                type = NavType.StringType
+                defaultValue = ""
+            })
+        ) { backStackEntry ->
+            val amicoId = backStackEntry.arguments?.getString("amicoId") ?: ""
+            val viewModel: AmicoViewModel = viewModel(
+                factory = AmicoViewModelFactory(AppContainer.amicoRepository)
+            )
+            AmicoScreen(navController, amicoId, viewModel)
         }
 
         composable("calcolo") { CalcoloScreen(navController) }

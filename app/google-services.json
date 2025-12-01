@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1044359789646",
+    "project_id": "carkarma-89efe",
+    "storage_bucket": "carkarma-89efe.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1044359789646:android:6833a017112347d8c1171f",
+        "android_client_info": {
+          "package_name": "it.col.mar.android.carkarma"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAr-bgaI5g_Qqp_iNma9OEiEuRAZkHRO04"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

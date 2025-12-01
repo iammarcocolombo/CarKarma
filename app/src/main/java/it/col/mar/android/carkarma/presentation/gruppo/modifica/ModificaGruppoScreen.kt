@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -40,7 +41,7 @@ import androidx.navigation.NavController
 @Composable
 fun ModificaGruppoScreen(
     navController: NavController,
-    gruppoId: Int,
+    gruppoId: String,
     viewModel: ModificaGruppoViewModel
 ) {
     LaunchedEffect(gruppoId) {
@@ -50,31 +51,36 @@ fun ModificaGruppoScreen(
     val nomeGruppo by viewModel.nomeGruppo.collectAsState()
     val amiciDisponibili by viewModel.amiciDisponibili.collectAsState()
     val amiciSelezionati by viewModel.amiciSelezionati.collectAsState()
-    var showDeleteDialog by remember { mutableStateOf(false) }
 
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    val isEditing = gruppoId.isNotEmpty()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        // Intestazione con Titolo e tasto Elimina (se in modifica)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (gruppoId == -1) "Crea Nuovo Gruppo" else "Modifica Gruppo",
+                text = if (!isEditing) "Crea Nuovo Gruppo" else "Modifica Gruppo",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary
             )
-            if (gruppoId != -1) {
+            if (isEditing) {
                 IconButton(onClick = { showDeleteDialog = true }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Elimina Gruppo")
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Elimina Gruppo",
+                        tint = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         }
-
 
         OutlinedTextField(
             value = nomeGruppo,
@@ -86,7 +92,7 @@ fun ModificaGruppoScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "Amici del Gruppo",
+            text = "Seleziona Amici",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
@@ -109,16 +115,28 @@ fun ModificaGruppoScreen(
                     Text(
                         text = amico.nome,
                         style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(start = 8.dp)
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .weight(1f)
                     )
+
+                    // Tasto per modificare al volo l'amico
+                    IconButton(onClick = {
+                        // LINK CORRETTO: Modifica amico esistente
+                        navController.navigate("amico?amicoId=${amico.id}")
+                    }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Modifica Amico")
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Bottone per creare un nuovo amico
         Button(
-            onClick = { navController.navigate("nuovoAmico") },
+            // LINK CORRETTO: Nuovo amico (parametro opzionale omesso)
+            onClick = { navController.navigate("amico") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -126,21 +144,24 @@ fun ModificaGruppoScreen(
                 containerColor = MaterialTheme.colorScheme.secondary
             )
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Aggiungi Amico")
+            Icon(Icons.Default.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Aggiungi Amico",
+            Text(
+                text = "Crea Nuovo Amico",
                 color = MaterialTheme.colorScheme.onSecondary
             )
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Bottone Salva Gruppo
         Button(
             onClick = {
                 viewModel.salvaGruppo {
                     navController.popBackStack()
                 }
             },
+            enabled = nomeGruppo.isNotBlank(), // Evita di salvare gruppi senza nome
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
@@ -148,21 +169,24 @@ fun ModificaGruppoScreen(
             Text("Salva Gruppo")
         }
     }
+
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Eliminare il gruppo?") },
-            text = { Text("Sei sicuro di voler eliminare il gruppo e tutte le informazioni associate?") },
+            text = { Text("Sei sicuro? Verranno eliminate anche tutte le uscite associate.") },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.eliminaGruppo {
-                        navController.navigate("home") {
-                            popUpTo("home") { inclusive = false }
-                            launchSingleTop = true
+                TextButton(
+                    onClick = {
+                        viewModel.eliminaGruppo {
+                            // Torna alla home e pulisci lo stack per evitare problemi col tasto indietro
+                            navController.navigate("home") {
+                                popUpTo("home") { inclusive = true }
+                            }
                         }
-                    }
-                    showDeleteDialog = false
-                }
+                        showDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Elimina")
                 }
