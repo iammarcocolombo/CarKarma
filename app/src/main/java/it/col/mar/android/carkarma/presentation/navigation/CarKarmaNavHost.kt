@@ -38,16 +38,18 @@ import it.col.mar.android.carkarma.presentation.uscita.UscitaScreen
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModel
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModelFactory
 import it.col.mar.android.carkarma.util.GoogleAuthClient
+import it.col.mar.android.carkarma.util.UserData
 import kotlinx.coroutines.launch
 
 @Composable
-fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValues) {
-
+fun CarKarmaNavHost(
+    navController: NavHostController,
+    paddingValues: PaddingValues,
+    googleAuthClient: GoogleAuthClient,
+    onLoginSuccess: (UserData) -> Unit
+) {
     val context = LocalContext.current
-    // Inizializziamo il client di Google Auth
-    val googleAuthClient = GoogleAuthClient(context)
-
-    // Determiniamo dove iniziare: se l'utente è già loggato -> Home, altrimenti -> Login
+    // Determiniamo la destinazione iniziale: se l'utente è loggato vai alla home, altrimenti al login
     val startDestination = if (googleAuthClient.getSignedInUser() != null) "home" else "login"
 
     NavHost(
@@ -62,7 +64,7 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
             val state by viewModel.state.collectAsState()
             val scope = rememberCoroutineScope()
 
-            // Launcher per il risultato del login di Google
+            // Launcher per gestire il risultato dell'intent di Google Sign-In
             val launcher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.StartIntentSenderForResult(),
                 onResult = { result ->
@@ -77,12 +79,16 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
                 }
             )
 
-            // Effetto collaterale: se il login ha successo, vai alla Home
+            // Effetto collaterale: se il login ha successo, naviga verso la Home
             LaunchedEffect(key1 = state.isSignInSuccessful) {
                 if (state.isSignInSuccessful) {
+                    // Notifica l'app principale che il login è avvenuto (per aggiornare il drawer)
+                    googleAuthClient.getSignedInUser()?.let { onLoginSuccess(it) }
+
                     Toast.makeText(context, "Accesso effettuato!", Toast.LENGTH_LONG).show()
+
                     navController.navigate("home") {
-                        // Rimuovi la schermata di login dal backstack così premendo indietro si esce dall'app
+                        // Rimuove la schermata di login dal backstack
                         popUpTo("login") { inclusive = true }
                     }
                     viewModel.resetState()
@@ -107,9 +113,13 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
         }
 
         // --- HOME SCREEN ---
-        composable("home") { HomeScreen(navController) }
+        composable("home") {
+            // HomeScreen è alleggerita, riceve solo il navController
+            // Il Drawer e la TopBar sono gestiti da AppScaffold/CarKarmaApp
+            HomeScreen(navController = navController)
+        }
 
-        // --- ALTRE SCHERMATE (Invariate) ---
+        // --- DETTAGLIO GRUPPO ---
         composable(
             route = "gruppo/{gruppoId}",
             arguments = listOf(navArgument("gruppoId") { type = NavType.StringType })
@@ -125,11 +135,12 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
             GruppoScreen(navController, gruppoId, viewModel)
         }
 
+        // --- MODIFICA GRUPPO ---
         composable(
             route = "modificaGruppo?gruppoId={gruppoId}",
             arguments = listOf(navArgument("gruppoId") {
                 type = NavType.StringType
-                defaultValue = ""
+                defaultValue = "" // Stringa vuota = Nuovo Gruppo
             })
         ) { backStackEntry ->
             val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
@@ -142,18 +153,20 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
             ModificaGruppoScreen(navController, gruppoId, viewModel)
         }
 
+        // --- USCITA (NUOVA O MODIFICA) ---
         composable(
             route = "uscita/{gruppoId}?uscitaId={uscitaId}",
             arguments = listOf(
                 navArgument("gruppoId") { type = NavType.StringType },
                 navArgument("uscitaId") {
                     type = NavType.StringType
-                    defaultValue = ""
+                    defaultValue = "" // Stringa vuota = Nuova Uscita
                 }
             )
         ) { backStackEntry ->
             val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
             val uscitaId = backStackEntry.arguments?.getString("uscitaId") ?: ""
+
             val viewModel: UscitaViewModel = viewModel(
                 factory = UscitaViewModelFactory(
                     AppContainer.uscitaRepository,
@@ -163,6 +176,7 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
             UscitaScreen(navController, gruppoId, uscitaId, viewModel)
         }
 
+        // --- DETTAGLIO AMICO (NUOVO O MODIFICA) ---
         composable(
             route = "amico?amicoId={amicoId}",
             arguments = listOf(navArgument("amicoId") {

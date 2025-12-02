@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowForward
@@ -32,6 +33,8 @@ fun HomeScreen(
 
     val gruppi by viewModel.gruppi.collectAsState()
 
+    // Usiamo uno Scaffold locale per gestire il FAB (Floating Action Button)
+    // Lo sfondo è trasparente per integrarsi perfettamente con il contenitore principale
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
@@ -41,30 +44,33 @@ fun HomeScreen(
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Nuovo Gruppo")
             }
-        }
+        },
+        containerColor = androidx.compose.ui.graphics.Color.Transparent
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
         ) {
+            // Titolo interno alla pagina
             Text(
                 text = "I tuoi Gruppi",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier.padding(vertical = 16.dp)
             )
 
             if (gruppi.isEmpty()) {
-                // --- EMPTY STATE ---
+                // --- EMPTY STATE (Nessun gruppo) ---
                 Box(
-                    modifier = Modifier.fillMaxSize().weight(1f),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        // Icona standard "List" al posto di "Groups"
                         Icon(
                             imageVector = Icons.Default.List,
                             contentDescription = null,
@@ -88,7 +94,7 @@ fun HomeScreen(
                 // --- LISTA GRUPPI ---
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(bottom = 80.dp) // Spazio per non coprire l'ultimo elemento col FAB
                 ) {
                     items(gruppi) { gruppo ->
                         GruppoCard(
@@ -123,13 +129,13 @@ fun GruppoCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Icona Gruppo
             Surface(
-                shape = MaterialTheme.shapes.medium,
+                shape = CircleShape,
                 color = MaterialTheme.colorScheme.primaryContainer,
                 modifier = Modifier.size(48.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    // Icona standard "Person" per rappresentare il gruppo
                     Icon(
                         imageVector = Icons.Default.Person,
                         contentDescription = null,
@@ -140,6 +146,7 @@ fun GruppoCard(
 
             Spacer(modifier = Modifier.width(16.dp))
 
+            // Info Gruppo
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = gruppo.nome,
@@ -154,7 +161,7 @@ fun GruppoCard(
                 )
             }
 
-            // Icona standard "ArrowForward"
+            // Freccia
             Icon(
                 imageVector = Icons.Default.ArrowForward,
                 contentDescription = null,
