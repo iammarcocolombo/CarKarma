@@ -19,10 +19,13 @@ class GruppoRepository(
     private val amicoRepository: AmicoRepository,
     private val uscitaRepository: UscitaRepository
 ) {
+    // Flow locale per la lista dei gruppi (aggiornata in tempo reale)
     private val _gruppi = MutableStateFlow<List<Gruppo>>(emptyList())
     val gruppi: StateFlow<List<Gruppo>> = _gruppi.asStateFlow()
 
     init {
+        // Ascoltiamo la collezione "gruppi" globale
+        // In una app multi-utente reale, qui si filtrerebbe per i gruppi dove l'utente è membro
         db.collection("gruppi")
             .addSnapshotListener { snapshot, e ->
                 if (e != null) return@addSnapshotListener
@@ -38,7 +41,12 @@ class GruppoRepository(
         return _gruppi.value.find { it.id == id }
     }
 
-    // --- SOTTOCOLLEZIONE MEMBRI ---
+    // --- GESTIONE SOTTOCOLLEZIONE "MEMBRI" (ISTANZE) ---
+
+    /**
+     * Restituisce un Flow in tempo reale dei membri di uno specifico gruppo.
+     * Questi oggetti Amico contengono i km e le uscite specifici per QUESTO gruppo.
+     */
     fun getMembriDelGruppo(gruppoId: String): Flow<List<Amico>> = callbackFlow {
         val registration = db.collection("gruppi").document(gruppoId).collection("membri")
             .addSnapshotListener { snapshot, e ->
@@ -47,14 +55,22 @@ class GruppoRepository(
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    trySend(snapshot.toObjects<Amico>())
+                    val membri = snapshot.toObjects<Amico>()
+                    trySend(membri)
                 }
             }
         awaitClose { registration.remove() }
     }
 
+    /**
+     * Aggiunge un amico al gruppo creando una copia "pulita" (km azzerati).
+     */
     fun aggiungiMembroAlGruppo(gruppoId: String, amicoTemplate: Amico) {
-        val nuovoMembro = amicoTemplate.copy(uscite = 0, guide = 0, km = 0)
+        val nuovoMembro = amicoTemplate.copy(
+            uscite = 0,
+            guide = 0,
+            km = 0 // Reset per il nuovo contesto
+        )
         db.collection("gruppi").document(gruppoId)
             .collection("membri").document(nuovoMembro.id)
             .set(nuovoMembro)
@@ -66,21 +82,33 @@ class GruppoRepository(
             .delete()
     }
 
-    fun aggiornaStatisticheMembro(gruppoId: String, amicoId: String, kmAggiunti: Int, haGuidato: Boolean) {
+    /**
+     * Aggiorna le statistiche di un membro specifico usando una transazione atomica.
+     * Supporta valori negativi per correzioni/rollback.
+     */
+    fun aggiornaStatisticheMembro(gruppoId: String, amicoId: String, deltaUscite: Int, deltaGuide: Int, deltaKm: Int) {
         val docRef = db.collection("gruppi").document(gruppoId).collection("membri").document(amicoId)
+
         db.runTransaction { transaction ->
             val snapshot = transaction.get(docRef)
             val amico = snapshot.toObject(Amico::class.java) ?: return@runTransaction
+
+            // Calcoliamo i nuovi valori assicurandoci che non vadano sotto zero
+            val nuoviUscite = (amico.uscite + deltaUscite).coerceAtLeast(0)
+            val nuoveGuide = (amico.guide + deltaGuide).coerceAtLeast(0)
+            val nuoviKm = (amico.km + deltaKm).coerceAtLeast(0)
+
             val updates = mapOf(
-                "uscite" to amico.uscite + 1,
-                "guide" to if (haGuidato) amico.guide + 1 else amico.guide,
-                "km" to if (haGuidato) amico.km + kmAggiunti else amico.km
+                "uscite" to nuoviUscite,
+                "guide" to nuoveGuide,
+                "km" to nuoviKm
             )
             transaction.update(docRef, updates)
         }
     }
 
     // --- GESTIONE GRUPPO ---
+
     fun aggiungiGruppo(gruppo: Gruppo) {
         val idFinale = if (gruppo.id.isEmpty()) UUID.randomUUID().toString() else gruppo.id
         val gruppoDaSalvare = gruppo.copy(id = idFinale)
@@ -92,19 +120,21 @@ class GruppoRepository(
     }
 
     fun eliminaGruppo(gruppoId: String) {
-        // 1. Elimina uscite (sottocollezione)
+        // 1. Elimina tutte le uscite associate (tramite UscitaRepository)
         uscitaRepository.eliminaTutteUsciteDelGruppo(gruppoId)
 
-        // 2. Elimina membri (sottocollezione) - Manualmente perché Firestore non fa cascade delete
+        // 2. Elimina tutti i membri dalla sottocollezione
         db.collection("gruppi").document(gruppoId).collection("membri").get()
             .addOnSuccessListener { snapshot ->
                 for (doc in snapshot.documents) {
                     doc.reference.delete()
                 }
-                // 3. Elimina il gruppo stesso
+                // 3. Infine, elimina il documento del gruppo stesso
                 db.collection("gruppi").document(gruppoId).delete()
             }
     }
 
-    fun generaNuovoId(): String = UUID.randomUUID().toString()
+    fun generaNuovoId(): String {
+        return UUID.randomUUID().toString()
+    }
 }

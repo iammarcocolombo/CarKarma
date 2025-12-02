@@ -23,14 +23,16 @@ class UscitaViewModel(
     private val gruppoRepository: GruppoRepository
 ) : ViewModel() {
 
-    // TODO: Incolla qui la tua API Key di OpenRouteService (Gratis)
-    // Prendila da: https://openrouteservice.org/dev/#/home
+    // TODO: Incolla qui la tua API Key di OpenRouteService (o Google Maps se hai cambiato idea)
     private val ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImQ0ZWE5MWY0MWQ5YjQ4NjQ4M2Q2NmUzYzU3YzBlOTE2IiwiaCI6Im11cm11cjY0In0="
 
     private val calcoloUseCase = CalcoloTurnoUseCase()
 
     private var currentUscitaId: String = ""
     private var currentGruppoId: String = ""
+
+    // Salviamo lo stato originale per poter fare il "revert" delle statistiche in caso di modifica
+    private var originalUscita: Uscita? = null
 
     private val _nomeUscita = MutableStateFlow("")
     val nomeUscita: StateFlow<String> = _nomeUscita
@@ -68,28 +70,34 @@ class UscitaViewModel(
         this.currentGruppoId = gruppoId
         this.currentUscitaId = uscitaId
 
+        // 1. Carichiamo i membri dal GRUPPO (sottocollezione)
         viewModelScope.launch {
             gruppoRepository.getMembriDelGruppo(gruppoId).collect { membri ->
                 _amiciDelGruppo.value = membri
             }
         }
 
+        // 2. Se è una modifica, carichiamo i dati dell'uscita
         if (uscitaId.isNotEmpty()) {
             viewModelScope.launch {
                 val uscita = uscitaRepository.getUscita(gruppoId, uscitaId)
                 if (uscita != null) {
+                    originalUscita = uscita // Importante: salviamo copia per il rollback
+
                     _nomeUscita.value = uscita.nome
                     _partecipantiSelezionati.value = uscita.partecipantiIds.toSet()
                     _guidatoriSelezionati.value = uscita.guidatoriIds.toSet()
                     _kmTotali.value = uscita.kmTotali
+                    _indirizzoPartenza.value = uscita.partenza
+                    _indirizzoDestinazione.value = uscita.destinazione
                 }
             }
         }
     }
 
-    fun onNomeUscitaChange(nuovoNome: String) { _nomeUscita.value = nuovoNome }
-    fun onPartenzaChange(addr: String) { _indirizzoPartenza.value = addr }
-    fun onDestinazioneChange(addr: String) { _indirizzoDestinazione.value = addr }
+    fun onNomeUscitaChange(v: String) { _nomeUscita.value = v }
+    fun onPartenzaChange(v: String) { _indirizzoPartenza.value = v }
+    fun onDestinazioneChange(v: String) { _indirizzoDestinazione.value = v }
 
     fun togglePartecipanteSelezionato(amicoId: String) {
         _partecipantiSelezionati.value = _partecipantiSelezionati.value.toMutableSet().apply {
@@ -120,7 +128,7 @@ class UscitaViewModel(
         val end = _indirizzoDestinazione.value
 
         if (start.isBlank() || end.isBlank()) {
-            _errorMessage.value = "Inserisci sia partenza che destinazione!"
+            _errorMessage.value = "Inserisci sia partenza che destinazione"
             return
         }
 
@@ -132,77 +140,52 @@ class UscitaViewModel(
         viewModelScope.launch {
             _isLoadingMaps.value = true
             try {
-                // Eseguiamo tutto in un thread separato (IO)
                 val km = withContext(Dispatchers.IO) {
-                    // 1. Troviamo le coordinate di partenza
-                    val startCoords = fetchCoordinates(start) ?: return@withContext null
-                    // 2. Troviamo le coordinate di arrivo
-                    val endCoords = fetchCoordinates(end) ?: return@withContext null
-                    // 3. Calcoliamo il percorso
-                    fetchRouteDistance(startCoords, endCoords)
+                    val s = fetchCoordinates(start) ?: return@withContext null
+                    val e = fetchCoordinates(end) ?: return@withContext null
+                    fetchRouteDistance(s, e)
                 }
 
                 if (km != null) {
                     _kmTotali.value = km
-                    _errorMessage.value = null // Tutto ok
+                    _errorMessage.value = null
                 } else {
-                    _errorMessage.value = "Indirizzo non trovato o percorso non calcolabile."
+                    _errorMessage.value = "Percorso non trovato."
                 }
             } catch (e: Exception) {
-                _errorMessage.value = "Errore di connessione: ${e.localizedMessage}"
-                Log.e("CarKarmaORS", "Errore", e)
+                _errorMessage.value = "Errore: ${e.message}"
             } finally {
                 _isLoadingMaps.value = false
             }
         }
     }
 
-    // Geocoding: Indirizzo -> Lat/Lon
     private fun fetchCoordinates(address: String): Pair<Double, Double>? {
         try {
-            val encodedAddress = URLEncoder.encode(address, "UTF-8")
-            val urlString = "https://api.openrouteservice.org/geocode/search?api_key=$ORS_API_KEY&text=$encodedAddress&size=1"
-
-            val jsonResponse = URL(urlString).readText()
-            val jsonObject = JSONObject(jsonResponse)
-
-            val features = jsonObject.getJSONArray("features")
-            if (features.length() > 0) {
-                val geometry = features.getJSONObject(0).getJSONObject("geometry")
-                val coordinates = geometry.getJSONArray("coordinates")
-                // ORS restituisce [Longitudine, Latitudine]
-                val lon = coordinates.getDouble(0)
-                val lat = coordinates.getDouble(1)
-                return Pair(lon, lat)
+            val enc = URLEncoder.encode(address, "UTF-8")
+            val url = "https://api.openrouteservice.org/geocode/search?api_key=$ORS_API_KEY&text=$enc&size=1"
+            val json = JSONObject(URL(url).readText())
+            val feats = json.getJSONArray("features")
+            if (feats.length() > 0) {
+                val coords = feats.getJSONObject(0).getJSONObject("geometry").getJSONArray("coordinates")
+                return Pair(coords.getDouble(0), coords.getDouble(1))
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
         return null
     }
 
-    // Routing: Lat/Lon -> Distanza Km
     private fun fetchRouteDistance(start: Pair<Double, Double>, end: Pair<Double, Double>): Int? {
         try {
-            val startStr = "${start.first},${start.second}"
-            val endStr = "${end.first},${end.second}"
-
-            val urlString = "https://api.openrouteservice.org/v2/directions/driving-car?api_key=$ORS_API_KEY&start=$startStr&end=$endStr"
-
-            val jsonResponse = URL(urlString).readText()
-            val jsonObject = JSONObject(jsonResponse)
-
-            val features = jsonObject.getJSONArray("features")
-            if (features.length() > 0) {
-                val props = features.getJSONObject(0).getJSONObject("properties")
-                val summary = props.getJSONObject("summary")
-                val distanceMeters = summary.getDouble("distance")
-                // Convertiamo metri in km
-                return (distanceMeters / 1000).toInt()
+            val s = "${start.first},${start.second}"
+            val e = "${end.first},${end.second}"
+            val url = "https://api.openrouteservice.org/v2/directions/driving-car?api_key=$ORS_API_KEY&start=$s&end=$e"
+            val json = JSONObject(URL(url).readText())
+            val feats = json.getJSONArray("features")
+            if (feats.length() > 0) {
+                val dist = feats.getJSONObject(0).getJSONObject("properties").getJSONObject("summary").getDouble("distance")
+                return (dist / 1000).toInt()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
         return null
     }
 
@@ -242,47 +225,80 @@ class UscitaViewModel(
     fun resetSuggerimento() { _suggerimentoGuidatore.value = null }
     fun clearError() { _errorMessage.value = null }
 
-    // --- SALVATAGGIO ---
+    // --- SALVATAGGIO & ROLLBACK ---
     fun salvaUscita(onSalvato: () -> Unit) {
         if (_partecipantiSelezionati.value.size < 2) {
-            _errorMessage.value = "Un'uscita richiede almeno 2 partecipanti."
+            _errorMessage.value = "Servono almeno 2 partecipanti."
             return
         }
 
         viewModelScope.launch {
-            val partecipantiList = _partecipantiSelezionati.value.toList()
-            val guidatoriList = _guidatoriSelezionati.value.toList()
-
-            val uscita = Uscita(
+            val nuovaUscita = Uscita(
                 id = if (currentUscitaId.isEmpty()) "" else currentUscitaId,
                 nome = _nomeUscita.value,
                 gruppoId = currentGruppoId,
-                partecipantiIds = partecipantiList,
+                partecipantiIds = _partecipantiSelezionati.value.toList(),
                 kmTotali = _kmTotali.value,
-                guidatoriIds = guidatoriList
+                guidatoriIds = _guidatoriSelezionati.value.toList(),
+                partenza = _indirizzoPartenza.value,
+                destinazione = _indirizzoDestinazione.value
             )
 
             if (currentUscitaId.isEmpty()) {
-                uscitaRepository.aggiungiUscita(uscita)
-                aggiornaStatisticheMembriGruppo(partecipantiList, guidatoriList, _kmTotali.value)
+                // CREAZIONE
+                uscitaRepository.aggiungiUscita(nuovaUscita)
+                // Applica le nuove statistiche
+                applicaStatistiche(nuovaUscita)
             } else {
-                uscitaRepository.aggiornaUscita(uscita)
+                // MODIFICA
+                // 1. Annulla l'effetto dell'uscita precedente (sottrai km e presenze)
+                originalUscita?.let { revertStatistiche(it) }
+
+                // 2. Salva la nuova versione
+                uscitaRepository.aggiornaUscita(nuovaUscita)
+
+                // 3. Applica le nuove statistiche
+                applicaStatistiche(nuovaUscita)
             }
             onSalvato()
         }
     }
 
-    private fun aggiornaStatisticheMembriGruppo(partecipanti: List<String>, guidatori: List<String>, km: Int) {
-        partecipanti.forEach { id ->
-            val haGuidato = guidatori.contains(id)
-            val kmGuidatiReali = if (haGuidato) km else 0
-            gruppoRepository.aggiornaStatisticheMembro(currentGruppoId, id, kmGuidatiReali, haGuidato)
+    // Aggiunge km e presenze (Delta POSITIVI)
+    private fun applicaStatistiche(u: Uscita) {
+        u.partecipantiIds.forEach { id ->
+            val haGuidato = u.guidatoriIds.contains(id)
+            val km = if (haGuidato) u.kmTotali else 0
+            // +1 uscita, +1 guida, +km
+            gruppoRepository.aggiornaStatisticheMembro(
+                currentGruppoId, id,
+                deltaUscite = 1,
+                deltaGuide = if (haGuidato) 1 else 0,
+                deltaKm = km
+            )
+        }
+    }
+
+    // Rimuove km e presenze (Delta NEGATIVI)
+    private fun revertStatistiche(u: Uscita) {
+        u.partecipantiIds.forEach { id ->
+            val haGuidato = u.guidatoriIds.contains(id)
+            val km = if (haGuidato) u.kmTotali else 0
+            // -1 uscita, -1 guida, -km
+            gruppoRepository.aggiornaStatisticheMembro(
+                currentGruppoId, id,
+                deltaUscite = -1,
+                deltaGuide = if (haGuidato) -1 else 0,
+                deltaKm = -km
+            )
         }
     }
 
     fun eliminaUscita(onEliminato: () -> Unit) {
         viewModelScope.launch {
             if (currentUscitaId.isNotEmpty()) {
+                // Se eliminiamo l'uscita, dobbiamo togliere le sue statistiche dal conteggio!
+                originalUscita?.let { revertStatistiche(it) }
                 uscitaRepository.eliminaUscita(currentGruppoId, currentUscitaId)
             }
             onEliminato()

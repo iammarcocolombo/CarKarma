@@ -61,7 +61,7 @@ fun UscitaScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(scrollState) // Tutta la pagina ora è scrollabile
+            .verticalScroll(scrollState) // Pagina scrollabile
             .padding(16.dp)
     ) {
         // Intestazione
@@ -83,7 +83,7 @@ fun UscitaScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // --- SEZIONE CALCOLO KM (MAPS) ---
+        // --- SEZIONE PERCORSO ---
         Text(
             text = "Percorso",
             style = MaterialTheme.typography.titleMedium,
@@ -95,6 +95,7 @@ fun UscitaScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
+                // I campi indirizzo rimangono visibili anche in modifica per riferimento
                 Row(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = partenza,
@@ -115,30 +116,32 @@ fun UscitaScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Button(
-                    onClick = { viewModel.calcolaDistanzaDaMaps() },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoadingMaps,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                ) {
-                    if (isLoadingMaps) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onSecondary,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Calcolo...")
-                    } else {
-                        Icon(Icons.Default.Place, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Calcola Km (Maps)")
+                // IL PULSANTE CALCOLO MAPS APPARE SOLO SE È UNA NUOVA USCITA
+                if (!isEditing) {
+                    Button(
+                        onClick = { viewModel.calcolaDistanzaDaMaps() },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isLoadingMaps,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        if (isLoadingMaps) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = MaterialTheme.colorScheme.onSecondary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Calcolo...")
+                        } else {
+                            Icon(Icons.Default.Place, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Calcola Km Auto")
+                        }
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Campo KM
+                // Campo KM (Sempre visibile e modificabile)
                 OutlinedTextField(
                     value = if (kmTotali == 0) "" else kmTotali.toString(),
                     onValueChange = { text ->
@@ -161,12 +164,10 @@ fun UscitaScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        // Usiamo una Card per raggruppare visivamente la lista
         OutlinedCard(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                // Iteriamo sugli elementi invece di usare LazyColumn (meglio dentro una ScrollView)
                 amiciDelGruppo.forEach { amico ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -198,7 +199,8 @@ fun UscitaScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // --- BOTTONE SUGGERIMENTO ALGORITMO ---
-        if (partecipantiSelezionati.size >= 2) {
+        // Mostrato solo se è una NUOVA uscita e ci sono abbastanza partecipanti
+        if (!isEditing && partecipantiSelezionati.size >= 2) {
             OutlinedButton(
                 onClick = { viewModel.calcolaSuggerimento() },
                 modifier = Modifier.fillMaxWidth(),
@@ -222,7 +224,7 @@ fun UscitaScreen(
             OutlinedCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.outlinedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surface // Sfondo leggermente diverso opzionale
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             ) {
                 Column(modifier = Modifier.padding(vertical = 8.dp)) {
@@ -271,11 +273,10 @@ fun UscitaScreen(
             }
         }
 
-        // Spazio extra per lo scroll comodo
         Spacer(modifier = Modifier.height(32.dp))
     }
 
-    // --- DIALOGHI (Invariati) ---
+    // --- DIALOGHI ---
     if (suggerimento != null) {
         AlertDialog(
             onDismissRequest = { viewModel.resetSuggerimento() },
