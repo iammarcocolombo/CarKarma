@@ -31,16 +31,17 @@ fun UscitaScreen(
         viewModel.loadUscita(gruppoId, uscitaId)
     }
 
-    // Stati generali
+    // --- STATI UI ---
     val nomeUscita by viewModel.nomeUscita.collectAsState()
     val amiciDelGruppo by viewModel.amiciDelGruppo.collectAsState()
     val partecipantiSelezionati by viewModel.partecipantiSelezionati.collectAsState()
     val guidatoriSelezionati by viewModel.guidatoriSelezionati.collectAsState()
     val kmTotali by viewModel.kmTotali.collectAsState()
 
-    // Stati per Mappe
+    // Stati Mappe & Calcolo
     val partenza by viewModel.indirizzoPartenza.collectAsState()
     val destinazione by viewModel.indirizzoDestinazione.collectAsState()
+    val isAndataRitorno by viewModel.isAndataRitorno.collectAsState()
     val isLoadingMaps by viewModel.isLoadingMaps.collectAsState()
 
     // Stati Dialog
@@ -50,21 +51,21 @@ fun UscitaScreen(
     var showEliminaDialog by remember { mutableStateOf(false) }
     val isEditing = uscitaId.isNotEmpty()
 
-    // Validazione per il pulsante Salva
+    // Validazione
     val isFormValid = nomeUscita.isNotBlank() && kmTotali > 0 &&
             partecipantiSelezionati.isNotEmpty() &&
             guidatoriSelezionati.isNotEmpty()
 
-    // Stato per lo scroll dell'intera pagina
+    // Scroll dell'intera pagina
     val scrollState = rememberScrollState()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(scrollState) // Pagina scrollabile
+            .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
-        // Intestazione
+        // --- TITOLO ---
         Text(
             text = if (isEditing) "Modifica Uscita" else "Nuova Uscita",
             style = MaterialTheme.typography.headlineSmall,
@@ -72,7 +73,7 @@ fun UscitaScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        // Campo Nome
+        // --- CAMPO NOME ---
         OutlinedTextField(
             value = nomeUscita,
             onValueChange = { viewModel.onNomeUscitaChange(it) },
@@ -83,7 +84,7 @@ fun UscitaScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // --- SEZIONE PERCORSO ---
+        // --- SEZIONE PERCORSO E KM ---
         Text(
             text = "Percorso",
             style = MaterialTheme.typography.titleMedium,
@@ -91,11 +92,9 @@ fun UscitaScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        OutlinedCard(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                // I campi indirizzo rimangono visibili anche in modifica per riferimento
+                // Campi Indirizzo
                 Row(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = partenza,
@@ -116,32 +115,56 @@ fun UscitaScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // IL PULSANTE CALCOLO MAPS APPARE SOLO SE È UNA NUOVA USCITA
-                if (!isEditing) {
-                    Button(
-                        onClick = { viewModel.calcolaDistanzaDaMaps() },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isLoadingMaps,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                    ) {
-                        if (isLoadingMaps) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = MaterialTheme.colorScheme.onSecondary,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Calcolo...")
-                        } else {
-                            Icon(Icons.Default.Place, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Calcola Km Auto")
+                // RIGA: Bottone Calcolo + Switch A/R
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Il bottone per calcolare appare solo se è una NUOVA uscita
+                    if (!isEditing) {
+                        Button(
+                            onClick = { viewModel.calcolaDistanzaDaMaps() },
+                            modifier = Modifier.weight(1f),
+                            enabled = !isLoadingMaps,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        ) {
+                            if (isLoadingMaps) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = MaterialTheme.colorScheme.onSecondary,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Calcolo...")
+                            } else {
+                                Icon(Icons.Default.Place, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Calcola Km")
+                            }
                         }
+                        Spacer(modifier = Modifier.width(16.dp))
+                    } else {
+                        // Se siamo in modifica, riempiamo lo spazio a sinistra
+                        Spacer(modifier = Modifier.weight(1f))
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Switch A/R (Sempre visibile)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "A/R",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        Switch(
+                            checked = isAndataRitorno,
+                            onCheckedChange = { viewModel.onAndataRitornoChange(it) }
+                        )
+                    }
                 }
 
-                // Campo KM (Sempre visibile e modificabile)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Campo KM (Editabile)
                 OutlinedTextField(
                     value = if (kmTotali == 0) "" else kmTotali.toString(),
                     onValueChange = { text ->
@@ -164,42 +187,37 @@ fun UscitaScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        OutlinedCard(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                amiciDelGruppo.forEach { amico ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { viewModel.togglePartecipanteSelezionato(amico.id) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Checkbox(
-                            checked = partecipantiSelezionati.contains(amico.id),
-                            onCheckedChange = { viewModel.togglePartecipanteSelezionato(amico.id) }
-                        )
-                        Text(
-                            text = "${amico.nome} (${amico.postiAuto} posti)",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                }
                 if (amiciDelGruppo.isEmpty()) {
-                    Text(
-                        "Nessun amico nel gruppo.",
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Text("Nessun amico nel gruppo.", modifier = Modifier.padding(16.dp))
+                } else {
+                    amiciDelGruppo.forEach { amico ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.togglePartecipanteSelezionato(amico.id) }
+                                .padding(horizontal = 8.dp, vertical = 0.dp) // Padding ridotto per compattezza
+                        ) {
+                            Checkbox(
+                                checked = partecipantiSelezionati.contains(amico.id),
+                                onCheckedChange = { viewModel.togglePartecipanteSelezionato(amico.id) }
+                            )
+                            Text(
+                                text = "${amico.nome} (${amico.postiAuto} posti)",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- BOTTONE SUGGERIMENTO ALGORITMO ---
-        // Mostrato solo se è una NUOVA uscita e ci sono abbastanza partecipanti
+        // --- BOTTONE SUGGERIMENTO ---
+        // Solo per nuove uscite e con min. 2 partecipanti
         if (!isEditing && partecipantiSelezionati.size >= 2) {
             OutlinedButton(
                 onClick = { viewModel.calcolaSuggerimento() },
@@ -223,9 +241,7 @@ fun UscitaScreen(
 
             OutlinedCard(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.outlinedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(vertical = 8.dp)) {
                     val candidati = amiciDelGruppo.filter { partecipantiSelezionati.contains(it.id) }
@@ -236,7 +252,7 @@ fun UscitaScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { viewModel.toggleGuidatoreSelezionato(amico.id) }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .padding(horizontal = 8.dp, vertical = 0.dp)
                         ) {
                             Checkbox(
                                 checked = guidatoriSelezionati.contains(amico.id),
@@ -251,7 +267,7 @@ fun UscitaScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // --- SALVATAGGIO ---
+        // --- TASTO SALVA ---
         Button(
             onClick = { viewModel.salvaUscita { navController.popBackStack() } },
             enabled = isFormValid,
@@ -262,6 +278,7 @@ fun UscitaScreen(
             Text("Salva Uscita")
         }
 
+        // --- TASTO ELIMINA (Solo Modifica) ---
         if (isEditing) {
             Spacer(modifier = Modifier.height(16.dp))
             TextButton(
@@ -273,6 +290,7 @@ fun UscitaScreen(
             }
         }
 
+        // Spazio extra per lo scroll
         Spacer(modifier = Modifier.height(32.dp))
     }
 
@@ -281,7 +299,7 @@ fun UscitaScreen(
         AlertDialog(
             onDismissRequest = { viewModel.resetSuggerimento() },
             title = { Text("L'algoritmo consiglia...") },
-            text = { Text(suggerimento ?: "") },
+            text = { Text(suggerimento ?: "", textAlign = TextAlign.Center) },
             confirmButton = { TextButton(onClick = { viewModel.resetSuggerimento() }) { Text("OK") } },
             icon = { Icon(Icons.Default.Info, contentDescription = null) }
         )
@@ -301,7 +319,7 @@ fun UscitaScreen(
         AlertDialog(
             onDismissRequest = { showEliminaDialog = false },
             title = { Text("Eliminare?") },
-            text = { Text("L'operazione è irreversibile.") },
+            text = { Text("L'operazione è irreversibile e i km verranno rimossi dalle statistiche.") },
             confirmButton = {
                 Button(
                     onClick = { viewModel.eliminaUscita { navController.popBackStack() }; showEliminaDialog = false },

@@ -34,6 +34,9 @@ class UscitaViewModel(
     // Salviamo lo stato originale per poter fare il "revert" delle statistiche in caso di modifica
     private var originalUscita: Uscita? = null
 
+    // Memorizza i km di sola andata calcolati dall'API per ricalcoli veloci
+    private var lastCalculatedOneWayKm: Int? = null
+
     private val _nomeUscita = MutableStateFlow("")
     val nomeUscita: StateFlow<String> = _nomeUscita
 
@@ -43,6 +46,10 @@ class UscitaViewModel(
 
     private val _indirizzoDestinazione = MutableStateFlow("")
     val indirizzoDestinazione: StateFlow<String> = _indirizzoDestinazione
+
+    // Stato Andata/Ritorno
+    private val _isAndataRitorno = MutableStateFlow(true)
+    val isAndataRitorno: StateFlow<Boolean> = _isAndataRitorno
 
     private val _isLoadingMaps = MutableStateFlow(false)
     val isLoadingMaps: StateFlow<Boolean> = _isLoadingMaps
@@ -90,6 +97,7 @@ class UscitaViewModel(
                     _kmTotali.value = uscita.kmTotali
                     _indirizzoPartenza.value = uscita.partenza
                     _indirizzoDestinazione.value = uscita.destinazione
+                    _isAndataRitorno.value = uscita.andataRitorno
                 }
             }
         }
@@ -98,6 +106,16 @@ class UscitaViewModel(
     fun onNomeUscitaChange(v: String) { _nomeUscita.value = v }
     fun onPartenzaChange(v: String) { _indirizzoPartenza.value = v }
     fun onDestinazioneChange(v: String) { _indirizzoDestinazione.value = v }
+
+    // Gestione cambio Andata/Ritorno con ricalcolo immediato
+    fun onAndataRitornoChange(isAR: Boolean) {
+        _isAndataRitorno.value = isAR
+        // Se abbiamo un valore base calcolato dall'API, lo usiamo per aggiornare i km
+        if (lastCalculatedOneWayKm != null) {
+            val multiplier = if (isAR) 2 else 1
+            _kmTotali.value = lastCalculatedOneWayKm!! * multiplier
+        }
+    }
 
     fun togglePartecipanteSelezionato(amicoId: String) {
         _partecipantiSelezionati.value = _partecipantiSelezionati.value.toMutableSet().apply {
@@ -120,7 +138,11 @@ class UscitaViewModel(
         }
     }
 
-    fun setKmTotali(km: Int) { _kmTotali.value = km }
+    fun setKmTotali(km: Int) {
+        _kmTotali.value = km
+        // Se l'utente modifica a mano, rompiamo il legame con il calcolo automatico precedente
+        lastCalculatedOneWayKm = null
+    }
 
     // --- CALCOLO CON OPEN ROUTE SERVICE (ORS) ---
     fun calcolaDistanzaDaMaps() {
@@ -140,14 +162,18 @@ class UscitaViewModel(
         viewModelScope.launch {
             _isLoadingMaps.value = true
             try {
-                val km = withContext(Dispatchers.IO) {
+                val kmSolaAndata = withContext(Dispatchers.IO) {
                     val s = fetchCoordinates(start) ?: return@withContext null
                     val e = fetchCoordinates(end) ?: return@withContext null
                     fetchRouteDistance(s, e)
                 }
 
-                if (km != null) {
-                    _kmTotali.value = km
+                if (kmSolaAndata != null) {
+                    lastCalculatedOneWayKm = kmSolaAndata
+
+                    val multiplier = if (_isAndataRitorno.value) 2 else 1
+                    _kmTotali.value = kmSolaAndata * multiplier
+
                     _errorMessage.value = null
                 } else {
                     _errorMessage.value = "Percorso non trovato."
@@ -241,7 +267,8 @@ class UscitaViewModel(
                 kmTotali = _kmTotali.value,
                 guidatoriIds = _guidatoriSelezionati.value.toList(),
                 partenza = _indirizzoPartenza.value,
-                destinazione = _indirizzoDestinazione.value
+                destinazione = _indirizzoDestinazione.value,
+                andataRitorno = _isAndataRitorno.value
             )
 
             if (currentUscitaId.isEmpty()) {

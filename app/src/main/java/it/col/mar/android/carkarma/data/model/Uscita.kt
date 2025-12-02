@@ -7,7 +7,8 @@ data class Uscita(
     val partecipantiIds: List<String> = emptyList(),
     val kmTotali: Int = 0,
     val guidatoriIds: List<String> = emptyList(),
-    // Nuovi campi per salvare le posizioni
     val partenza: String = "",
-    val destinazione: String = ""
+    val destinazione: String = "",
+    // Nuovo campo: Default a true come richiesto
+    val andataRitorno: Boolean = true
 )
