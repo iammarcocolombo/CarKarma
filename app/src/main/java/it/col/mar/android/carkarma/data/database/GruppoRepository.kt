@@ -19,20 +19,29 @@ class GruppoRepository(
     private val amicoRepository: AmicoRepository,
     private val uscitaRepository: UscitaRepository
 ) {
-    // Flow locale per la lista dei gruppi (aggiornata in tempo reale)
     private val _gruppi = MutableStateFlow<List<Gruppo>>(emptyList())
     val gruppi: StateFlow<List<Gruppo>> = _gruppi.asStateFlow()
 
     init {
-        // Ascoltiamo la collezione "gruppi" globale
-        // In una app multi-utente reale, qui si filtrerebbe per i gruppi dove l'utente è membro
-        db.collection("gruppi")
-            .addSnapshotListener { snapshot, e ->
-                if (e != null) return@addSnapshotListener
-                if (snapshot != null) {
-                    _gruppi.value = snapshot.toObjects<Gruppo>()
-                }
+        // ASCOLTO FILTRATO PER "UTENTI CON ACCESSO"
+        // Scarichiamo solo i gruppi dove l'utente corrente ha i permessi (è in utentiIds)
+        auth.addAuthStateListener { firebaseAuth ->
+            val userId = firebaseAuth.currentUser?.uid
+
+            if (userId != null) {
+                db.collection("gruppi")
+                    .whereArrayContains("utentiIds", userId)
+                    .addSnapshotListener { snapshot, e ->
+                        if (e != null) return@addSnapshotListener
+                        if (snapshot != null) {
+                            _gruppi.value = snapshot.toObjects<Gruppo>()
+                        }
+                    }
+            } else {
+                // Se l'utente fa logout, puliamo la lista per sicurezza
+                _gruppi.value = emptyList()
             }
+        }
     }
 
     fun getTuttiIGruppi(): List<Gruppo> = _gruppi.value
@@ -41,11 +50,10 @@ class GruppoRepository(
         return _gruppi.value.find { it.id == id }
     }
 
-    // --- GESTIONE SOTTOCOLLEZIONE "MEMBRI" (ISTANZE) ---
+    // --- GESTIONE MEMBRI (SOTTOCOLLEZIONE "ISTANZE") ---
 
     /**
-     * Restituisce un Flow in tempo reale dei membri di uno specifico gruppo.
-     * Questi oggetti Amico contengono i km e le uscite specifici per QUESTO gruppo.
+     * Restituisce un Flow in tempo reale dei membri (amici) di uno specifico gruppo.
      */
     fun getMembriDelGruppo(gruppoId: String): Flow<List<Amico>> = callbackFlow {
         val registration = db.collection("gruppi").document(gruppoId).collection("membri")
@@ -55,8 +63,7 @@ class GruppoRepository(
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    val membri = snapshot.toObjects<Amico>()
-                    trySend(membri)
+                    trySend(snapshot.toObjects<Amico>())
                 }
             }
         awaitClose { registration.remove() }
@@ -107,11 +114,28 @@ class GruppoRepository(
         }
     }
 
-    // --- GESTIONE GRUPPO ---
+    // --- GESTIONE GRUPPO (CREAZIONE E ACCESSO) ---
 
     fun aggiungiGruppo(gruppo: Gruppo) {
+        val userId = auth.currentUser?.uid ?: return
+
         val idFinale = if (gruppo.id.isEmpty()) UUID.randomUUID().toString() else gruppo.id
-        val gruppoDaSalvare = gruppo.copy(id = idFinale)
+
+        // LOGICA DI ACCESSO:
+        // Chi crea il gruppo (io) deve avere subito l'accesso, quindi mi aggiungo a 'utentiIds'.
+        // Questo garantisce che la query nel blocco init trovi il gruppo appena creato.
+        val utentiAggiornati = if (gruppo.utentiIds.contains(userId)) {
+            gruppo.utentiIds
+        } else {
+            gruppo.utentiIds + userId
+        }
+
+        val gruppoDaSalvare = gruppo.copy(
+            id = idFinale,
+            utentiIds = utentiAggiornati
+            // Nota: membriIds rimane quello passato dal ViewModel (la lista degli ID degli amici selezionati)
+        )
+
         db.collection("gruppi").document(idFinale).set(gruppoDaSalvare)
     }
 
@@ -134,7 +158,5 @@ class GruppoRepository(
             }
     }
 
-    fun generaNuovoId(): String {
-        return UUID.randomUUID().toString()
-    }
+    fun generaNuovoId(): String = UUID.randomUUID().toString()
 }
