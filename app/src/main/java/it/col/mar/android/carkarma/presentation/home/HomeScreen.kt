@@ -54,12 +54,15 @@ fun HomeScreen(
                 .padding(horizontal = 16.dp)
         ) {
             // Titolo interno alla pagina
+            // MODIFICA GRAFICA:
+            // 1. Stile ridotto a titleLarge per coerenza con la TopBar
+            // 2. Padding top rimosso per ridurre lo spazio vuoto
             Text(
                 text = "I tuoi Gruppi",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(vertical = 16.dp)
+                modifier = Modifier.padding(bottom = 16.dp, top = 8.dp)
             )
 
             if (gruppi.isEmpty()) {
