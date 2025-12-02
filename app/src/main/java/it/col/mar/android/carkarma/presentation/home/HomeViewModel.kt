@@ -17,6 +17,21 @@ class HomeViewModel(
     private val _joinState = MutableStateFlow<JoinState>(JoinState.Idle)
     val joinState: StateFlow<JoinState> = _joinState
 
+    init {
+        // SINCRONIZZAZIONE AUTOMATICA ALL'AVVIO
+        // Ascoltiamo i gruppi: appena vengono caricati da Firebase,
+        // scarichiamo anche i membri e li salviamo nella rubrica personale.
+        // Questo garantisce che se ti unisci a un gruppo (anche da un altro dispositivo),
+        // ti ritrovi gli amici pronti per creare nuovi gruppi.
+        viewModelScope.launch {
+            repository.gruppi.collect { listaGruppi ->
+                if (listaGruppi.isNotEmpty()) {
+                    repository.sincronizzaMembriInRubrica(listaGruppi)
+                }
+            }
+        }
+    }
+
     fun aggiungiGruppo(gruppo: Gruppo) {
         repository.aggiungiGruppo(gruppo)
     }
@@ -29,6 +44,10 @@ class HomeViewModel(
             repository.uniscitiAlGruppo(codiceGruppo) { successo ->
                 if (successo) {
                     _joinState.value = JoinState.Success
+                    // Nota: Non serve fare altro qui.
+                    // Poiché ci siamo uniti con successo, Firebase aggiornerà la lista 'gruppi' (grazie al listener nel Repository).
+                    // Questo farà scattare il 'collect' nel blocco init qui sopra,
+                    // che a sua volta chiamerà 'sincronizzaMembriInRubrica'. Tutto automatico!
                 } else {
                     _joinState.value = JoinState.Error("Codice non valido o errore di connessione")
                 }

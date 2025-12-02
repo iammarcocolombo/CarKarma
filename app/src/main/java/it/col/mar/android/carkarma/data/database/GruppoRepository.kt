@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 class GruppoRepository(
@@ -24,8 +25,10 @@ class GruppoRepository(
     val gruppi: StateFlow<List<Gruppo>> = _gruppi.asStateFlow()
 
     init {
+        // ASCOLTO FILTRATO PER "UTENTI CON ACCESSO"
         auth.addAuthStateListener { firebaseAuth ->
             val userId = firebaseAuth.currentUser?.uid
+
             if (userId != null) {
                 db.collection("gruppi")
                     .whereArrayContains("utentiIds", userId)
@@ -47,17 +50,65 @@ class GruppoRepository(
         return _gruppi.value.find { it.id == id }
     }
 
+    // --- NUOVA FUNZIONE DI SINCRONIZZAZIONE ---
+    /**
+     * Scorre tutti i gruppi passati, scarica i loro membri e li salva nella rubrica personale.
+     * Questo assicura che se ti unisci a un gruppo, ti ritrovi gli amici anche per altri gruppi.
+     */
+    suspend fun sincronizzaMembriInRubrica(listaGruppi: List<Gruppo>) {
+        if (auth.currentUser == null) return
+
+        // Per ogni gruppo, scarichiamo i membri (sottocollezione)
+        listaGruppi.forEach { gruppo ->
+            try {
+                val snapshot = db.collection("gruppi").document(gruppo.id)
+                    .collection("membri").get().await()
+
+                val membriDelGruppo = snapshot.toObjects<Amico>()
+
+                if (membriDelGruppo.isNotEmpty()) {
+                    // Usiamo la funzione di importazione che abbiamo già creato
+                    // (Questa funzione resetta i km a 0 per creare lo "stampino")
+                    amicoRepository.importaAmici(membriDelGruppo)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    // --- GESTIONE MEMBRI (SOTTOCOLLEZIONE) ---
+
     fun getMembriDelGruppo(gruppoId: String): Flow<List<Amico>> = callbackFlow {
         val registration = db.collection("gruppi").document(gruppoId).collection("membri")
             .addSnapshotListener { snapshot, e ->
-                if (e != null) { close(e); return@addSnapshotListener }
-                if (snapshot != null) { trySend(snapshot.toObjects<Amico>()) }
+                if (e != null) {
+                    close(e)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    trySend(snapshot.toObjects<Amico>())
+                }
             }
         awaitClose { registration.remove() }
     }
 
+    suspend fun getMembriSnapshot(gruppoId: String): List<Amico> {
+        return try {
+            val snapshot = db.collection("gruppi").document(gruppoId)
+                .collection("membri").get().await()
+            snapshot.toObjects<Amico>()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     fun aggiungiMembroAlGruppo(gruppoId: String, amicoTemplate: Amico) {
-        val nuovoMembro = amicoTemplate.copy(uscite = 0, guide = 0, km = 0)
+        val nuovoMembro = amicoTemplate.copy(
+            uscite = 0,
+            guide = 0,
+            km = 0 // Reset per il nuovo contesto
+        )
         db.collection("gruppi").document(gruppoId)
             .collection("membri").document(nuovoMembro.id)
             .set(nuovoMembro)
@@ -83,6 +134,8 @@ class GruppoRepository(
         }
     }
 
+    // --- GESTIONE GRUPPO ---
+
     fun aggiungiGruppo(gruppo: Gruppo) {
         val userId = auth.currentUser?.uid ?: return
         val idFinale = if (gruppo.id.isEmpty()) UUID.randomUUID().toString() else gruppo.id
@@ -91,24 +144,25 @@ class GruppoRepository(
         db.collection("gruppi").document(idFinale).set(gruppoDaSalvare)
     }
 
-    fun aggiornaGruppo(gruppo: Gruppo) { aggiungiGruppo(gruppo) }
+    fun aggiornaGruppo(gruppo: Gruppo) {
+        aggiungiGruppo(gruppo)
+    }
 
     fun eliminaGruppo(gruppoId: String) {
         uscitaRepository.eliminaTutteUsciteDelGruppo(gruppoId)
         db.collection("gruppi").document(gruppoId).collection("membri").get()
             .addOnSuccessListener { snapshot ->
-                for (doc in snapshot.documents) { doc.reference.delete() }
+                for (doc in snapshot.documents) {
+                    doc.reference.delete()
+                }
                 db.collection("gruppi").document(gruppoId).delete()
             }
     }
 
     fun generaNuovoId(): String = UUID.randomUUID().toString()
 
-    // --- INVITO TRAMITE LINK ---
-    /**
-     * Chiamata quando un utente clicca un link di invito.
-     * Aggiunge l'utente corrente alla lista di chi può vedere il gruppo.
-     */
+    // --- CONDIVISIONE ---
+
     fun uniscitiAlGruppo(gruppoId: String, onResult: (Boolean) -> Unit) {
         val userId = auth.currentUser?.uid
         if (userId == null) {
@@ -116,7 +170,6 @@ class GruppoRepository(
             return
         }
 
-        // Aggiunge l'ID utente all'array 'utentiIds' del gruppo
         db.collection("gruppi").document(gruppoId)
             .update("utentiIds", FieldValue.arrayUnion(userId))
             .addOnSuccessListener { onResult(true) }

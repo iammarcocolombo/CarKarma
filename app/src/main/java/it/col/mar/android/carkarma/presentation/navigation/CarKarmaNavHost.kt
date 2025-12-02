@@ -57,6 +57,7 @@ fun CarKarmaNavHost(
     onLoginSuccess: (UserData) -> Unit
 ) {
     val context = LocalContext.current
+    // Determina la destinazione iniziale
     val startDestination = if (googleAuthClient.getSignedInUser() != null) "home" else "login"
 
     NavHost(
@@ -86,8 +87,10 @@ fun CarKarmaNavHost(
                 if (state.isSignInSuccessful) {
                     googleAuthClient.getSignedInUser()?.let { user ->
                         onLoginSuccess(user)
+                        // Salviamo l'utente nel DB pubblico per permettere gli inviti
                         AppContainer.gruppoRepository.rendiUtenteCercabile(user.userId, user.email, user.username)
                     }
+
                     Toast.makeText(context, "Accesso effettuato!", Toast.LENGTH_LONG).show()
                     navController.navigate("home") {
                         popUpTo("login") { inclusive = true }
@@ -110,7 +113,6 @@ fun CarKarmaNavHost(
 
         // --- HOME SCREEN ---
         composable("home") {
-            // Pulizia: Non passiamo più userData/onSignOut perché se ne occupa l'AppScaffold globale
             HomeScreen(navController = navController)
         }
 
@@ -124,22 +126,34 @@ fun CarKarmaNavHost(
             val user = googleAuthClient.getSignedInUser()
 
             if (user == null) {
+                // Se non è loggato, mandalo al login
                 LaunchedEffect(Unit) {
                     Toast.makeText(context, "Accedi per unirti al gruppo", Toast.LENGTH_SHORT).show()
                     navController.navigate("login")
                 }
             } else {
                 var loading by remember { mutableStateOf(true) }
+                val scope = rememberCoroutineScope()
 
                 LaunchedEffect(groupId) {
                     AppContainer.gruppoRepository.uniscitiAlGruppo(groupId) { successo ->
-                        loading = false
                         if (successo) {
-                            Toast.makeText(context, "Ti sei unito al gruppo!", Toast.LENGTH_SHORT).show()
-                            navController.navigate("gruppo/$groupId") {
-                                popUpTo("home") { inclusive = false }
+                            // MAGIA: Una volta uniti, scarichiamo gli amici del gruppo e li importiamo nella rubrica personale!
+                            scope.launch {
+                                val membriDelGruppo = AppContainer.gruppoRepository.getMembriSnapshot(groupId)
+                                if (membriDelGruppo.isNotEmpty()) {
+                                    AppContainer.amicoRepository.importaAmici(membriDelGruppo)
+                                    Toast.makeText(context, "Gruppo e Amici importati!", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "Ti sei unito al gruppo!", Toast.LENGTH_SHORT).show()
+                                }
+                                loading = false
+                                navController.navigate("gruppo/$groupId") {
+                                    popUpTo("home") { inclusive = false }
+                                }
                             }
                         } else {
+                            loading = false
                             Toast.makeText(context, "Errore: impossibile unirsi al gruppo.", Toast.LENGTH_LONG).show()
                             navController.navigate("home")
                         }
@@ -154,22 +168,25 @@ fun CarKarmaNavHost(
             }
         }
 
-        // --- ALTRE ROTTE ---
+        // --- DETTAGLIO GRUPPO ---
         composable("gruppo/{gruppoId}", arguments = listOf(navArgument("gruppoId") { type = NavType.StringType })) {
             val vm: GruppoViewModel = viewModel(factory = GruppoViewModelFactory(AppContainer.amicoRepository, AppContainer.gruppoRepository, AppContainer.uscitaRepository))
             GruppoScreen(navController, it.arguments?.getString("gruppoId") ?: "", vm)
         }
 
+        // --- MODIFICA GRUPPO ---
         composable("modificaGruppo?gruppoId={gruppoId}", arguments = listOf(navArgument("gruppoId") { type = NavType.StringType; defaultValue = "" })) {
             val vm: ModificaGruppoViewModel = viewModel(factory = ModificaGruppoViewModelFactory(AppContainer.gruppoRepository, AppContainer.amicoRepository))
             ModificaGruppoScreen(navController, it.arguments?.getString("gruppoId") ?: "", vm)
         }
 
+        // --- USCITA ---
         composable("uscita/{gruppoId}?uscitaId={uscitaId}", arguments = listOf(navArgument("gruppoId") { type = NavType.StringType }, navArgument("uscitaId") { type = NavType.StringType; defaultValue = "" })) {
             val vm: UscitaViewModel = viewModel(factory = UscitaViewModelFactory(AppContainer.uscitaRepository, AppContainer.gruppoRepository))
             UscitaScreen(navController, it.arguments?.getString("gruppoId") ?: "", it.arguments?.getString("uscitaId") ?: "", vm)
         }
 
+        // --- AMICO ---
         composable("amico?amicoId={amicoId}", arguments = listOf(navArgument("amicoId") { type = NavType.StringType; defaultValue = "" })) {
             val vm: AmicoViewModel = viewModel(factory = AmicoViewModelFactory(AppContainer.amicoRepository))
             AmicoScreen(navController, it.arguments?.getString("amicoId") ?: "", vm)
