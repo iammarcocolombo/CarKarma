@@ -1,9 +1,19 @@
 package it.col.mar.android.carkarma.presentation.navigation
 
+import android.app.Activity
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -21,27 +31,90 @@ import it.col.mar.android.carkarma.presentation.gruppo.modifica.ModificaGruppoSc
 import it.col.mar.android.carkarma.presentation.gruppo.modifica.ModificaGruppoViewModel
 import it.col.mar.android.carkarma.presentation.gruppo.modifica.ModificaGruppoViewModelFactory
 import it.col.mar.android.carkarma.presentation.home.HomeScreen
+import it.col.mar.android.carkarma.presentation.login.LoginScreen
+import it.col.mar.android.carkarma.presentation.login.LoginViewModel
+import it.col.mar.android.carkarma.presentation.login.LoginViewModelFactory
 import it.col.mar.android.carkarma.presentation.uscita.UscitaScreen
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModel
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModelFactory
+import it.col.mar.android.carkarma.util.GoogleAuthClient
+import kotlinx.coroutines.launch
 
 @Composable
 fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValues) {
+
+    val context = LocalContext.current
+    // Inizializziamo il client di Google Auth
+    val googleAuthClient = GoogleAuthClient(context)
+
+    // Determiniamo dove iniziare: se l'utente è già loggato -> Home, altrimenti -> Login
+    val startDestination = if (googleAuthClient.getSignedInUser() != null) "home" else "login"
+
     NavHost(
         navController = navController,
-        startDestination = "home",
+        startDestination = startDestination,
         modifier = Modifier.padding(paddingValues)
     ) {
-        // HOME
+
+        // --- LOGIN SCREEN ---
+        composable("login") {
+            val viewModel: LoginViewModel = viewModel(factory = LoginViewModelFactory())
+            val state by viewModel.state.collectAsState()
+            val scope = rememberCoroutineScope()
+
+            // Launcher per il risultato del login di Google
+            val launcher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.StartIntentSenderForResult(),
+                onResult = { result ->
+                    if (result.resultCode == Activity.RESULT_OK) {
+                        scope.launch {
+                            val signInResult = googleAuthClient.signInWithIntent(
+                                intent = result.data ?: return@launch
+                            )
+                            viewModel.onSignInResult(signInResult)
+                        }
+                    }
+                }
+            )
+
+            // Effetto collaterale: se il login ha successo, vai alla Home
+            LaunchedEffect(key1 = state.isSignInSuccessful) {
+                if (state.isSignInSuccessful) {
+                    Toast.makeText(context, "Accesso effettuato!", Toast.LENGTH_LONG).show()
+                    navController.navigate("home") {
+                        // Rimuovi la schermata di login dal backstack così premendo indietro si esce dall'app
+                        popUpTo("login") { inclusive = true }
+                    }
+                    viewModel.resetState()
+                }
+            }
+
+            LoginScreen(
+                state = state,
+                onSignInClick = {
+                    scope.launch {
+                        val signInIntentSender = googleAuthClient.signIn()
+                        if (signInIntentSender != null) {
+                            launcher.launch(
+                                IntentSenderRequest.Builder(signInIntentSender).build()
+                            )
+                        } else {
+                            Toast.makeText(context, "Errore avvio login Google", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            )
+        }
+
+        // --- HOME SCREEN ---
         composable("home") { HomeScreen(navController) }
 
-        // DETTAGLIO GRUPPO (ID obbligatorio)
+        // --- ALTRE SCHERMATE (Invariate) ---
         composable(
             route = "gruppo/{gruppoId}",
             arguments = listOf(navArgument("gruppoId") { type = NavType.StringType })
         ) { backStackEntry ->
             val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
-
             val viewModel: GruppoViewModel = viewModel(
                 factory = GruppoViewModelFactory(
                     AppContainer.amicoRepository,
@@ -49,68 +122,47 @@ fun CarKarmaNavHost(navController: NavHostController, paddingValues: PaddingValu
                     AppContainer.uscitaRepository
                 )
             )
-
-            GruppoScreen(
-                navController = navController,
-                gruppoId = gruppoId,
-                viewModel = viewModel
-            )
+            GruppoScreen(navController, gruppoId, viewModel)
         }
 
-        // MODIFICA GRUPPO (ID opzionale: se vuoto è nuovo)
         composable(
             route = "modificaGruppo?gruppoId={gruppoId}",
             arguments = listOf(navArgument("gruppoId") {
                 type = NavType.StringType
-                defaultValue = "" // Stringa vuota = Nuovo Gruppo
+                defaultValue = ""
             })
         ) { backStackEntry ->
             val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
-
             val viewModel: ModificaGruppoViewModel = viewModel(
                 factory = ModificaGruppoViewModelFactory(
                     AppContainer.gruppoRepository,
                     AppContainer.amicoRepository
                 )
             )
-
-            ModificaGruppoScreen(
-                navController = navController,
-                gruppoId = gruppoId,
-                viewModel = viewModel
-            )
+            ModificaGruppoScreen(navController, gruppoId, viewModel)
         }
 
-        // USCITA (UscitaID opzionale)
         composable(
             route = "uscita/{gruppoId}?uscitaId={uscitaId}",
             arguments = listOf(
                 navArgument("gruppoId") { type = NavType.StringType },
                 navArgument("uscitaId") {
                     type = NavType.StringType
-                    defaultValue = "" // Stringa vuota = Nuova Uscita
+                    defaultValue = ""
                 }
             )
         ) { backStackEntry ->
             val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
             val uscitaId = backStackEntry.arguments?.getString("uscitaId") ?: ""
-
             val viewModel: UscitaViewModel = viewModel(
                 factory = UscitaViewModelFactory(
                     AppContainer.uscitaRepository,
                     AppContainer.gruppoRepository
                 )
             )
-
-            UscitaScreen(
-                navController = navController,
-                gruppoId = gruppoId,
-                uscitaId = uscitaId,
-                viewModel = viewModel
-            )
+            UscitaScreen(navController, gruppoId, uscitaId, viewModel)
         }
 
-        // DETTAGLIO AMICO (ID opzionale)
         composable(
             route = "amico?amicoId={amicoId}",
             arguments = listOf(navArgument("amicoId") {
