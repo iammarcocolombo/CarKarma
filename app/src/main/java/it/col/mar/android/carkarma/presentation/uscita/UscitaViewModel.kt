@@ -1,5 +1,6 @@
 package it.col.mar.android.carkarma.presentation.uscita
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.col.mar.android.carkarma.data.database.GruppoRepository
@@ -7,15 +8,24 @@ import it.col.mar.android.carkarma.data.database.UscitaRepository
 import it.col.mar.android.carkarma.data.model.Amico
 import it.col.mar.android.carkarma.data.model.Uscita
 import it.col.mar.android.carkarma.domain.CalcoloTurnoUseCase
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.URL
+import java.net.URLEncoder
 import java.util.Locale
 
 class UscitaViewModel(
     private val uscitaRepository: UscitaRepository,
     private val gruppoRepository: GruppoRepository
 ) : ViewModel() {
+
+    // TODO: Incolla qui la tua API Key di OpenRouteService (Gratis)
+    // Prendila da: https://openrouteservice.org/dev/#/home
+    private val ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImQ0ZWE5MWY0MWQ5YjQ4NjQ4M2Q2NmUzYzU3YzBlOTE2IiwiaCI6Im11cm11cjY0In0="
 
     private val calcoloUseCase = CalcoloTurnoUseCase()
 
@@ -24,6 +34,17 @@ class UscitaViewModel(
 
     private val _nomeUscita = MutableStateFlow("")
     val nomeUscita: StateFlow<String> = _nomeUscita
+
+    // --- CAMPI INDIRIZZO ---
+    private val _indirizzoPartenza = MutableStateFlow("")
+    val indirizzoPartenza: StateFlow<String> = _indirizzoPartenza
+
+    private val _indirizzoDestinazione = MutableStateFlow("")
+    val indirizzoDestinazione: StateFlow<String> = _indirizzoDestinazione
+
+    private val _isLoadingMaps = MutableStateFlow(false)
+    val isLoadingMaps: StateFlow<Boolean> = _isLoadingMaps
+    // -----------------------
 
     private val _amiciDelGruppo = MutableStateFlow<List<Amico>>(emptyList())
     val amiciDelGruppo: StateFlow<List<Amico>> = _amiciDelGruppo
@@ -47,18 +68,14 @@ class UscitaViewModel(
         this.currentGruppoId = gruppoId
         this.currentUscitaId = uscitaId
 
-        // 1. Carichiamo i membri dal GRUPPO (sottocollezione)
-        // Fondamentale: usiamo i dati "istanza" con i km specifici di questo gruppo
         viewModelScope.launch {
             gruppoRepository.getMembriDelGruppo(gruppoId).collect { membri ->
                 _amiciDelGruppo.value = membri
             }
         }
 
-        // 2. Se è una modifica, carichiamo i dati dell'uscita
         if (uscitaId.isNotEmpty()) {
             viewModelScope.launch {
-                // CORREZIONE: Ora passiamo anche gruppoId perché le uscite sono annidate
                 val uscita = uscitaRepository.getUscita(gruppoId, uscitaId)
                 if (uscita != null) {
                     _nomeUscita.value = uscita.nome
@@ -71,6 +88,8 @@ class UscitaViewModel(
     }
 
     fun onNomeUscitaChange(nuovoNome: String) { _nomeUscita.value = nuovoNome }
+    fun onPartenzaChange(addr: String) { _indirizzoPartenza.value = addr }
+    fun onDestinazioneChange(addr: String) { _indirizzoDestinazione.value = addr }
 
     fun togglePartecipanteSelezionato(amicoId: String) {
         _partecipantiSelezionati.value = _partecipantiSelezionati.value.toMutableSet().apply {
@@ -95,7 +114,99 @@ class UscitaViewModel(
 
     fun setKmTotali(km: Int) { _kmTotali.value = km }
 
-    // --- ALGORITMO DI SUGGERIMENTO ---
+    // --- CALCOLO CON OPEN ROUTE SERVICE (ORS) ---
+    fun calcolaDistanzaDaMaps() {
+        val start = _indirizzoPartenza.value
+        val end = _indirizzoDestinazione.value
+
+        if (start.isBlank() || end.isBlank()) {
+            _errorMessage.value = "Inserisci sia partenza che destinazione!"
+            return
+        }
+
+        if (ORS_API_KEY.contains("LA_TUA_CHIAVE")) {
+            _errorMessage.value = "Manca la API Key di ORS nel codice!"
+            return
+        }
+
+        viewModelScope.launch {
+            _isLoadingMaps.value = true
+            try {
+                // Eseguiamo tutto in un thread separato (IO)
+                val km = withContext(Dispatchers.IO) {
+                    // 1. Troviamo le coordinate di partenza
+                    val startCoords = fetchCoordinates(start) ?: return@withContext null
+                    // 2. Troviamo le coordinate di arrivo
+                    val endCoords = fetchCoordinates(end) ?: return@withContext null
+                    // 3. Calcoliamo il percorso
+                    fetchRouteDistance(startCoords, endCoords)
+                }
+
+                if (km != null) {
+                    _kmTotali.value = km
+                    _errorMessage.value = null // Tutto ok
+                } else {
+                    _errorMessage.value = "Indirizzo non trovato o percorso non calcolabile."
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Errore di connessione: ${e.localizedMessage}"
+                Log.e("CarKarmaORS", "Errore", e)
+            } finally {
+                _isLoadingMaps.value = false
+            }
+        }
+    }
+
+    // Geocoding: Indirizzo -> Lat/Lon
+    private fun fetchCoordinates(address: String): Pair<Double, Double>? {
+        try {
+            val encodedAddress = URLEncoder.encode(address, "UTF-8")
+            val urlString = "https://api.openrouteservice.org/geocode/search?api_key=$ORS_API_KEY&text=$encodedAddress&size=1"
+
+            val jsonResponse = URL(urlString).readText()
+            val jsonObject = JSONObject(jsonResponse)
+
+            val features = jsonObject.getJSONArray("features")
+            if (features.length() > 0) {
+                val geometry = features.getJSONObject(0).getJSONObject("geometry")
+                val coordinates = geometry.getJSONArray("coordinates")
+                // ORS restituisce [Longitudine, Latitudine]
+                val lon = coordinates.getDouble(0)
+                val lat = coordinates.getDouble(1)
+                return Pair(lon, lat)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
+    }
+
+    // Routing: Lat/Lon -> Distanza Km
+    private fun fetchRouteDistance(start: Pair<Double, Double>, end: Pair<Double, Double>): Int? {
+        try {
+            val startStr = "${start.first},${start.second}"
+            val endStr = "${end.first},${end.second}"
+
+            val urlString = "https://api.openrouteservice.org/v2/directions/driving-car?api_key=$ORS_API_KEY&start=$startStr&end=$endStr"
+
+            val jsonResponse = URL(urlString).readText()
+            val jsonObject = JSONObject(jsonResponse)
+
+            val features = jsonObject.getJSONArray("features")
+            if (features.length() > 0) {
+                val props = features.getJSONObject(0).getJSONObject("properties")
+                val summary = props.getJSONObject("summary")
+                val distanceMeters = summary.getDouble("distance")
+                // Convertiamo metri in km
+                return (distanceMeters / 1000).toInt()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
+    }
+
+    // --- ALGORITMO SUGGERIMENTO ---
     fun calcolaSuggerimento() {
         val amiciOggetti = _amiciDelGruppo.value
         val partecipantiIds = _partecipantiSelezionati.value
@@ -124,7 +235,7 @@ class UscitaViewModel(
                 _suggerimentoGuidatore.value = sb.toString()
             }
         } else {
-            _suggerimentoGuidatore.value = "Nessuna soluzione trovata! Controlla i posti auto."
+            _suggerimentoGuidatore.value = "Nessuna soluzione trovata! Controlla i posti auto disponibili."
         }
     }
 
@@ -142,9 +253,6 @@ class UscitaViewModel(
             val partecipantiList = _partecipantiSelezionati.value.toList()
             val guidatoriList = _guidatoriSelezionati.value.toList()
 
-            // Creiamo l'oggetto Uscita
-            // L'ID viene gestito dentro aggiungiUscita se vuoto, ma qui possiamo lasciarlo vuoto o gestirlo
-            // Per coerenza con il repo, passiamo l'oggetto.
             val uscita = Uscita(
                 id = if (currentUscitaId.isEmpty()) "" else currentUscitaId,
                 nome = _nomeUscita.value,
@@ -155,16 +263,10 @@ class UscitaViewModel(
             )
 
             if (currentUscitaId.isEmpty()) {
-                // NUOVA USCITA
                 uscitaRepository.aggiungiUscita(uscita)
-
-                // Aggiorniamo statistiche SOLO se è nuova uscita (per non duplicare i km in modifica)
                 aggiornaStatisticheMembriGruppo(partecipantiList, guidatoriList, _kmTotali.value)
             } else {
-                // MODIFICA
                 uscitaRepository.aggiornaUscita(uscita)
-                // Nota: In un'app completa qui dovremmo fare il rollback delle statistiche vecchie
-                // e applicare le nuove. Per semplicità in questa versione non lo facciamo.
             }
             onSalvato()
         }
@@ -174,8 +276,6 @@ class UscitaViewModel(
         partecipanti.forEach { id ->
             val haGuidato = guidatori.contains(id)
             val kmGuidatiReali = if (haGuidato) km else 0
-
-            // Usiamo il metodo del GruppoRepository per aggiornare la sottocollezione
             gruppoRepository.aggiornaStatisticheMembro(currentGruppoId, id, kmGuidatiReali, haGuidato)
         }
     }
@@ -183,7 +283,6 @@ class UscitaViewModel(
     fun eliminaUscita(onEliminato: () -> Unit) {
         viewModelScope.launch {
             if (currentUscitaId.isNotEmpty()) {
-                // CORREZIONE: Passiamo anche il gruppoId per trovare l'uscita nella sottocollezione
                 uscitaRepository.eliminaUscita(currentGruppoId, currentUscitaId)
             }
             onEliminato()
