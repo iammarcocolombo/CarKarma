@@ -1,6 +1,7 @@
 package it.col.mar.android.carkarma.data.database
 
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.toObjects
 import it.col.mar.android.carkarma.data.model.Amico
@@ -23,11 +24,8 @@ class GruppoRepository(
     val gruppi: StateFlow<List<Gruppo>> = _gruppi.asStateFlow()
 
     init {
-        // ASCOLTO FILTRATO PER "UTENTI CON ACCESSO"
-        // Scarichiamo solo i gruppi dove l'utente corrente ha i permessi (è in utentiIds)
         auth.addAuthStateListener { firebaseAuth ->
             val userId = firebaseAuth.currentUser?.uid
-
             if (userId != null) {
                 db.collection("gruppi")
                     .whereArrayContains("utentiIds", userId)
@@ -38,7 +36,6 @@ class GruppoRepository(
                         }
                     }
             } else {
-                // Se l'utente fa logout, puliamo la lista per sicurezza
                 _gruppi.value = emptyList()
             }
         }
@@ -50,34 +47,17 @@ class GruppoRepository(
         return _gruppi.value.find { it.id == id }
     }
 
-    // --- GESTIONE MEMBRI (SOTTOCOLLEZIONE "ISTANZE") ---
-
-    /**
-     * Restituisce un Flow in tempo reale dei membri (amici) di uno specifico gruppo.
-     */
     fun getMembriDelGruppo(gruppoId: String): Flow<List<Amico>> = callbackFlow {
         val registration = db.collection("gruppi").document(gruppoId).collection("membri")
             .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    close(e)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    trySend(snapshot.toObjects<Amico>())
-                }
+                if (e != null) { close(e); return@addSnapshotListener }
+                if (snapshot != null) { trySend(snapshot.toObjects<Amico>()) }
             }
         awaitClose { registration.remove() }
     }
 
-    /**
-     * Aggiunge un amico al gruppo creando una copia "pulita" (km azzerati).
-     */
     fun aggiungiMembroAlGruppo(gruppoId: String, amicoTemplate: Amico) {
-        val nuovoMembro = amicoTemplate.copy(
-            uscite = 0,
-            guide = 0,
-            km = 0 // Reset per il nuovo contesto
-        )
+        val nuovoMembro = amicoTemplate.copy(uscite = 0, guide = 0, km = 0)
         db.collection("gruppi").document(gruppoId)
             .collection("membri").document(nuovoMembro.id)
             .set(nuovoMembro)
@@ -89,74 +69,63 @@ class GruppoRepository(
             .delete()
     }
 
-    /**
-     * Aggiorna le statistiche di un membro specifico usando una transazione atomica.
-     * Supporta valori negativi per correzioni/rollback.
-     */
     fun aggiornaStatisticheMembro(gruppoId: String, amicoId: String, deltaUscite: Int, deltaGuide: Int, deltaKm: Int) {
         val docRef = db.collection("gruppi").document(gruppoId).collection("membri").document(amicoId)
-
         db.runTransaction { transaction ->
             val snapshot = transaction.get(docRef)
             val amico = snapshot.toObject(Amico::class.java) ?: return@runTransaction
-
-            // Calcoliamo i nuovi valori assicurandoci che non vadano sotto zero
-            val nuoviUscite = (amico.uscite + deltaUscite).coerceAtLeast(0)
-            val nuoveGuide = (amico.guide + deltaGuide).coerceAtLeast(0)
-            val nuoviKm = (amico.km + deltaKm).coerceAtLeast(0)
-
             val updates = mapOf(
-                "uscite" to nuoviUscite,
-                "guide" to nuoveGuide,
-                "km" to nuoviKm
+                "uscite" to (amico.uscite + deltaUscite).coerceAtLeast(0),
+                "guide" to (amico.guide + deltaGuide).coerceAtLeast(0),
+                "km" to (amico.km + deltaKm).coerceAtLeast(0)
             )
             transaction.update(docRef, updates)
         }
     }
 
-    // --- GESTIONE GRUPPO (CREAZIONE E ACCESSO) ---
-
     fun aggiungiGruppo(gruppo: Gruppo) {
         val userId = auth.currentUser?.uid ?: return
-
         val idFinale = if (gruppo.id.isEmpty()) UUID.randomUUID().toString() else gruppo.id
-
-        // LOGICA DI ACCESSO:
-        // Chi crea il gruppo (io) deve avere subito l'accesso, quindi mi aggiungo a 'utentiIds'.
-        // Questo garantisce che la query nel blocco init trovi il gruppo appena creato.
-        val utentiAggiornati = if (gruppo.utentiIds.contains(userId)) {
-            gruppo.utentiIds
-        } else {
-            gruppo.utentiIds + userId
-        }
-
-        val gruppoDaSalvare = gruppo.copy(
-            id = idFinale,
-            utentiIds = utentiAggiornati
-            // Nota: membriIds rimane quello passato dal ViewModel (la lista degli ID degli amici selezionati)
-        )
-
+        val utentiAggiornati = if (gruppo.utentiIds.contains(userId)) gruppo.utentiIds else gruppo.utentiIds + userId
+        val gruppoDaSalvare = gruppo.copy(id = idFinale, utentiIds = utentiAggiornati)
         db.collection("gruppi").document(idFinale).set(gruppoDaSalvare)
     }
 
-    fun aggiornaGruppo(gruppo: Gruppo) {
-        aggiungiGruppo(gruppo)
-    }
+    fun aggiornaGruppo(gruppo: Gruppo) { aggiungiGruppo(gruppo) }
 
     fun eliminaGruppo(gruppoId: String) {
-        // 1. Elimina tutte le uscite associate (tramite UscitaRepository)
         uscitaRepository.eliminaTutteUsciteDelGruppo(gruppoId)
-
-        // 2. Elimina tutti i membri dalla sottocollezione
         db.collection("gruppi").document(gruppoId).collection("membri").get()
             .addOnSuccessListener { snapshot ->
-                for (doc in snapshot.documents) {
-                    doc.reference.delete()
-                }
-                // 3. Infine, elimina il documento del gruppo stesso
+                for (doc in snapshot.documents) { doc.reference.delete() }
                 db.collection("gruppi").document(gruppoId).delete()
             }
     }
 
     fun generaNuovoId(): String = UUID.randomUUID().toString()
+
+    // --- INVITO TRAMITE LINK ---
+    /**
+     * Chiamata quando un utente clicca un link di invito.
+     * Aggiunge l'utente corrente alla lista di chi può vedere il gruppo.
+     */
+    fun uniscitiAlGruppo(gruppoId: String, onResult: (Boolean) -> Unit) {
+        val userId = auth.currentUser?.uid
+        if (userId == null) {
+            onResult(false)
+            return
+        }
+
+        // Aggiunge l'ID utente all'array 'utentiIds' del gruppo
+        db.collection("gruppi").document(gruppoId)
+            .update("utentiIds", FieldValue.arrayUnion(userId))
+            .addOnSuccessListener { onResult(true) }
+            .addOnFailureListener { onResult(false) }
+    }
+
+    fun rendiUtenteCercabile(uid: String, email: String?, nome: String?) {
+        if (email == null) return
+        val userMap = mapOf("uid" to uid, "email" to email, "nome" to nome)
+        db.collection("public_users").document(uid).set(userMap)
+    }
 }

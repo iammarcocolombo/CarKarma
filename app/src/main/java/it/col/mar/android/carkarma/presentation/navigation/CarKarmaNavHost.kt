@@ -5,13 +5,20 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -20,6 +27,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import it.col.mar.android.carkarma.data.database.AppContainer
 import it.col.mar.android.carkarma.presentation.amico.AmicoScreen
 import it.col.mar.android.carkarma.presentation.amico.AmicoViewModel
@@ -49,7 +57,6 @@ fun CarKarmaNavHost(
     onLoginSuccess: (UserData) -> Unit
 ) {
     val context = LocalContext.current
-    // Determiniamo la destinazione iniziale: se l'utente è loggato vai alla home, altrimenti al login
     val startDestination = if (googleAuthClient.getSignedInUser() != null) "home" else "login"
 
     NavHost(
@@ -57,38 +64,32 @@ fun CarKarmaNavHost(
         startDestination = startDestination,
         modifier = Modifier.padding(paddingValues)
     ) {
-
         // --- LOGIN SCREEN ---
         composable("login") {
             val viewModel: LoginViewModel = viewModel(factory = LoginViewModelFactory())
             val state by viewModel.state.collectAsState()
             val scope = rememberCoroutineScope()
 
-            // Launcher per gestire il risultato dell'intent di Google Sign-In
             val launcher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.StartIntentSenderForResult(),
                 onResult = { result ->
                     if (result.resultCode == Activity.RESULT_OK) {
                         scope.launch {
-                            val signInResult = googleAuthClient.signInWithIntent(
-                                intent = result.data ?: return@launch
-                            )
+                            val signInResult = googleAuthClient.signInWithIntent(intent = result.data ?: return@launch)
                             viewModel.onSignInResult(signInResult)
                         }
                     }
                 }
             )
 
-            // Effetto collaterale: se il login ha successo, naviga verso la Home
             LaunchedEffect(key1 = state.isSignInSuccessful) {
                 if (state.isSignInSuccessful) {
-                    // Notifica l'app principale che il login è avvenuto (per aggiornare il drawer)
-                    googleAuthClient.getSignedInUser()?.let { onLoginSuccess(it) }
-
+                    googleAuthClient.getSignedInUser()?.let { user ->
+                        onLoginSuccess(user)
+                        AppContainer.gruppoRepository.rendiUtenteCercabile(user.userId, user.email, user.username)
+                    }
                     Toast.makeText(context, "Accesso effettuato!", Toast.LENGTH_LONG).show()
-
                     navController.navigate("home") {
-                        // Rimuove la schermata di login dal backstack
                         popUpTo("login") { inclusive = true }
                     }
                     viewModel.resetState()
@@ -99,14 +100,9 @@ fun CarKarmaNavHost(
                 state = state,
                 onSignInClick = {
                     scope.launch {
-                        val signInIntentSender = googleAuthClient.signIn()
-                        if (signInIntentSender != null) {
-                            launcher.launch(
-                                IntentSenderRequest.Builder(signInIntentSender).build()
-                            )
-                        } else {
-                            Toast.makeText(context, "Errore avvio login Google", Toast.LENGTH_SHORT).show()
-                        }
+                        val intentSender = googleAuthClient.signIn()
+                        if (intentSender != null) launcher.launch(IntentSenderRequest.Builder(intentSender).build())
+                        else Toast.makeText(context, "Errore configurazione Google", Toast.LENGTH_SHORT).show()
                     }
                 }
             )
@@ -114,81 +110,69 @@ fun CarKarmaNavHost(
 
         // --- HOME SCREEN ---
         composable("home") {
-            // HomeScreen è alleggerita, riceve solo il navController
-            // Il Drawer e la TopBar sono gestiti da AppScaffold/CarKarmaApp
+            // Pulizia: Non passiamo più userData/onSignOut perché se ne occupa l'AppScaffold globale
             HomeScreen(navController = navController)
         }
 
-        // --- DETTAGLIO GRUPPO ---
+        // --- JOIN GRUPPO VIA LINK ---
         composable(
-            route = "gruppo/{gruppoId}",
-            arguments = listOf(navArgument("gruppoId") { type = NavType.StringType })
+            route = "join/{groupId}",
+            deepLinks = listOf(navDeepLink { uriPattern = "carkarma://join/{groupId}" }),
+            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
         ) { backStackEntry ->
-            val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
-            val viewModel: GruppoViewModel = viewModel(
-                factory = GruppoViewModelFactory(
-                    AppContainer.amicoRepository,
-                    AppContainer.gruppoRepository,
-                    AppContainer.uscitaRepository
-                )
-            )
-            GruppoScreen(navController, gruppoId, viewModel)
-        }
+            val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+            val user = googleAuthClient.getSignedInUser()
 
-        // --- MODIFICA GRUPPO ---
-        composable(
-            route = "modificaGruppo?gruppoId={gruppoId}",
-            arguments = listOf(navArgument("gruppoId") {
-                type = NavType.StringType
-                defaultValue = "" // Stringa vuota = Nuovo Gruppo
-            })
-        ) { backStackEntry ->
-            val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
-            val viewModel: ModificaGruppoViewModel = viewModel(
-                factory = ModificaGruppoViewModelFactory(
-                    AppContainer.gruppoRepository,
-                    AppContainer.amicoRepository
-                )
-            )
-            ModificaGruppoScreen(navController, gruppoId, viewModel)
-        }
-
-        // --- USCITA (NUOVA O MODIFICA) ---
-        composable(
-            route = "uscita/{gruppoId}?uscitaId={uscitaId}",
-            arguments = listOf(
-                navArgument("gruppoId") { type = NavType.StringType },
-                navArgument("uscitaId") {
-                    type = NavType.StringType
-                    defaultValue = "" // Stringa vuota = Nuova Uscita
+            if (user == null) {
+                LaunchedEffect(Unit) {
+                    Toast.makeText(context, "Accedi per unirti al gruppo", Toast.LENGTH_SHORT).show()
+                    navController.navigate("login")
                 }
-            )
-        ) { backStackEntry ->
-            val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
-            val uscitaId = backStackEntry.arguments?.getString("uscitaId") ?: ""
+            } else {
+                var loading by remember { mutableStateOf(true) }
 
-            val viewModel: UscitaViewModel = viewModel(
-                factory = UscitaViewModelFactory(
-                    AppContainer.uscitaRepository,
-                    AppContainer.gruppoRepository
-                )
-            )
-            UscitaScreen(navController, gruppoId, uscitaId, viewModel)
+                LaunchedEffect(groupId) {
+                    AppContainer.gruppoRepository.uniscitiAlGruppo(groupId) { successo ->
+                        loading = false
+                        if (successo) {
+                            Toast.makeText(context, "Ti sei unito al gruppo!", Toast.LENGTH_SHORT).show()
+                            navController.navigate("gruppo/$groupId") {
+                                popUpTo("home") { inclusive = false }
+                            }
+                        } else {
+                            Toast.makeText(context, "Errore: impossibile unirsi al gruppo.", Toast.LENGTH_LONG).show()
+                            navController.navigate("home")
+                        }
+                    }
+                }
+
+                if (loading) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
         }
 
-        // --- DETTAGLIO AMICO (NUOVO O MODIFICA) ---
-        composable(
-            route = "amico?amicoId={amicoId}",
-            arguments = listOf(navArgument("amicoId") {
-                type = NavType.StringType
-                defaultValue = ""
-            })
-        ) { backStackEntry ->
-            val amicoId = backStackEntry.arguments?.getString("amicoId") ?: ""
-            val viewModel: AmicoViewModel = viewModel(
-                factory = AmicoViewModelFactory(AppContainer.amicoRepository)
-            )
-            AmicoScreen(navController, amicoId, viewModel)
+        // --- ALTRE ROTTE ---
+        composable("gruppo/{gruppoId}", arguments = listOf(navArgument("gruppoId") { type = NavType.StringType })) {
+            val vm: GruppoViewModel = viewModel(factory = GruppoViewModelFactory(AppContainer.amicoRepository, AppContainer.gruppoRepository, AppContainer.uscitaRepository))
+            GruppoScreen(navController, it.arguments?.getString("gruppoId") ?: "", vm)
+        }
+
+        composable("modificaGruppo?gruppoId={gruppoId}", arguments = listOf(navArgument("gruppoId") { type = NavType.StringType; defaultValue = "" })) {
+            val vm: ModificaGruppoViewModel = viewModel(factory = ModificaGruppoViewModelFactory(AppContainer.gruppoRepository, AppContainer.amicoRepository))
+            ModificaGruppoScreen(navController, it.arguments?.getString("gruppoId") ?: "", vm)
+        }
+
+        composable("uscita/{gruppoId}?uscitaId={uscitaId}", arguments = listOf(navArgument("gruppoId") { type = NavType.StringType }, navArgument("uscitaId") { type = NavType.StringType; defaultValue = "" })) {
+            val vm: UscitaViewModel = viewModel(factory = UscitaViewModelFactory(AppContainer.uscitaRepository, AppContainer.gruppoRepository))
+            UscitaScreen(navController, it.arguments?.getString("gruppoId") ?: "", it.arguments?.getString("uscitaId") ?: "", vm)
+        }
+
+        composable("amico?amicoId={amicoId}", arguments = listOf(navArgument("amicoId") { type = NavType.StringType; defaultValue = "" })) {
+            val vm: AmicoViewModel = viewModel(factory = AmicoViewModelFactory(AppContainer.amicoRepository))
+            AmicoScreen(navController, it.arguments?.getString("amicoId") ?: "", vm)
         }
     }
 }

@@ -12,21 +12,18 @@ import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
 import java.util.concurrent.CancellationException
 
-/**
- * Gestisce il login con Google e lo scambio del token con Firebase.
- */
 class GoogleAuthClient(
     private val context: Context
 ) {
     private val auth = Firebase.auth
     private val oneTapClient: SignInClient = Identity.getSignInClient(context)
 
-    // Controlla se c'è già un utente loggato (non anonimo)
     fun getSignedInUser(): UserData? = auth.currentUser?.run {
         UserData(
             userId = uid,
             username = displayName,
-            profilePictureUrl = photoUrl?.toString()
+            profilePictureUrl = photoUrl?.toString(),
+            email = email // Recuperiamo l'email!
         )
     }
 
@@ -38,7 +35,7 @@ class GoogleAuthClient(
                         BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
                             .setSupported(true)
                             .setFilterByAuthorizedAccounts(false)
-                            .setServerClientId("1044359789646-f16h1b150i30rva1b14u2h1i390c17mq.apps.googleusercontent.com") // <-- ATTENZIONE: Questo va configurato dopo!
+                            .setServerClientId("1044359789646-f16h1b150i30rva1b14u2h1i390c17mq.apps.googleusercontent.com") // <-- RIMETTI IL TUO ID QUI
                             .build()
                     )
                     .setAutoSelectEnabled(true)
@@ -64,7 +61,8 @@ class GoogleAuthClient(
                     UserData(
                         userId = uid,
                         username = displayName,
-                        profilePictureUrl = photoUrl?.toString()
+                        profilePictureUrl = photoUrl?.toString(),
+                        email = email // Recuperiamo l'email anche qui
                     )
                 },
                 errorMessage = null
@@ -94,5 +92,6 @@ data class SignInResult(
 data class UserData(
     val userId: String,
     val username: String?,
-    val profilePictureUrl: String?
+    val profilePictureUrl: String?,
+    val email: String? // <--- QUESTO CAMPO ERA QUELLO MANCANTE
 )

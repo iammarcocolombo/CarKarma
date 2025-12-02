@@ -61,6 +61,9 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
 
+    // AGGIUNTA FONDAMENTALE: Libreria Icone Estese (Auto, Gruppi, Mappe, ecc.)
+    implementation(libs.androidx.material.icons.extended)
+
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("androidx.compose.ui:ui-text-google-fonts:1.7.0")
 
@@ -72,10 +75,15 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
-    // MODIFICA QUI: Usiamo la versione 33.1.0 che è stabile e compatibile con Kotlin 1.9
+    // Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-auth")
+
+    // Google Login
     implementation("com.google.android.gms:play-services-auth:21.0.0")
+
+    // QR Code
+    implementation("com.google.zxing:core:3.5.1")
 }

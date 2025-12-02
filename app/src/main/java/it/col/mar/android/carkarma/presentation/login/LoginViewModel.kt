@@ -45,7 +45,8 @@ class LoginViewModel : ViewModel() {
                 auth.signInWithEmailAndPassword(email, pass).await()
                 val user = auth.currentUser
                 val userData = user?.run {
-                    UserData(uid, displayName, photoUrl?.toString())
+                    // CORREZIONE: Aggiunto user.email
+                    UserData(uid, displayName, photoUrl?.toString(), email)
                 }
                 onSignInResult(SignInResult(userData, null))
             } catch (e: Exception) {
@@ -65,8 +66,7 @@ class LoginViewModel : ViewModel() {
                 // 1. Creiamo l'utente
                 auth.createUserWithEmailAndPassword(email, pass).await()
 
-                // 2. (Opzionale) Impostiamo un nome di default basato sulla mail
-                // perché la registrazione email base non chiede il nome
+                // 2. Impostiamo un nome di default basato sulla mail
                 val user = auth.currentUser
                 val nomeProvvisorio = email.substringBefore("@")
 
@@ -78,7 +78,8 @@ class LoginViewModel : ViewModel() {
 
                 // 3. Completiamo il login
                 val userData = user?.run {
-                    UserData(uid, nomeProvvisorio, photoUrl?.toString())
+                    // CORREZIONE: Aggiunto user.email anche qui
+                    UserData(uid, nomeProvvisorio, photoUrl?.toString(), email)
                 }
                 onSignInResult(SignInResult(userData, null))
             } catch (e: Exception) {
