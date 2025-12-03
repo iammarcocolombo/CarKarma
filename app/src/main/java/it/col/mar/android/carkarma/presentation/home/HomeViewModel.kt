@@ -36,20 +36,26 @@ class HomeViewModel(
         repository.aggiungiGruppo(gruppo)
     }
 
-    fun uniscitiAlGruppo(codiceGruppo: String) {
-        if (codiceGruppo.isBlank()) return
+    fun uniscitiAlGruppo(inputUtente: String) {
+        if (inputUtente.isBlank()) return
+
+        // PULIZIA INTELLIGENTE DELL'INPUT:
+        // 1. Rimuove spazi vuoti prima e dopo (.trim())
+        // 2. Se l'utente ha incollato un link intero, prendiamo solo l'ultima parte (l'ID)
+        var codicePulito = inputUtente.trim()
+
+        if (codicePulito.contains("/")) {
+            // Prende tutto quello che c'è dopo l'ultimo slash (es. da "carkarma://join/XYZ" prende "XYZ")
+            codicePulito = codicePulito.substringAfterLast("/")
+        }
 
         _joinState.value = JoinState.Loading
         viewModelScope.launch {
-            repository.uniscitiAlGruppo(codiceGruppo) { successo ->
+            repository.uniscitiAlGruppo(codicePulito) { successo ->
                 if (successo) {
                     _joinState.value = JoinState.Success
-                    // Nota: Non serve fare altro qui.
-                    // Poiché ci siamo uniti con successo, Firebase aggiornerà la lista 'gruppi' (grazie al listener nel Repository).
-                    // Questo farà scattare il 'collect' nel blocco init qui sopra,
-                    // che a sua volta chiamerà 'sincronizzaMembriInRubrica'. Tutto automatico!
                 } else {
-                    _joinState.value = JoinState.Error("Codice non valido o errore di connessione")
+                    _joinState.value = JoinState.Error("Gruppo non trovato o errore di connessione.")
                 }
             }
         }

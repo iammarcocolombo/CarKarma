@@ -1,6 +1,7 @@
 package it.col.mar.android.carkarma.presentation.gruppo
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -36,6 +37,7 @@ fun GruppoScreen(
     gruppoId: String,
     viewModel: GruppoViewModel
 ) {
+    // Carichiamo i dati del gruppo appena entriamo
     LaunchedEffect(gruppoId) {
         viewModel.loadGruppo(gruppoId)
     }
@@ -47,8 +49,9 @@ fun GruppoScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
+    // Stato per il Dialog di Condivisione
     var showShareDialog by remember { mutableStateOf(false) }
-    // Stato per il Dialog di conferma uscita dal gruppo
+    // Stato per il Dialog di conferma uscita
     var showLeaveDialog by remember { mutableStateOf(false) }
 
     if (errorMessage != null) {
@@ -103,24 +106,21 @@ fun GruppoScreen(
                     )
                 }
 
-                // AZIONI: Invita, Modifica, Esci
+                // AZIONI
                 Row {
-                    // Tasto Invita
                     IconButton(onClick = { showShareDialog = true }) {
                         Icon(Icons.Default.Share, "Invita", tint = MaterialTheme.colorScheme.primary)
                     }
 
-                    // Tasto Modifica
                     IconButton(onClick = { navController.navigate("modificaGruppo?gruppoId=${gruppo!!.id}") }) {
                         Icon(Icons.Default.Edit, "Modifica", tint = MaterialTheme.colorScheme.primary)
                     }
 
-                    // Tasto Lascia Gruppo
                     IconButton(onClick = { showLeaveDialog = true }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ExitToApp,
                             contentDescription = "Lascia Gruppo",
-                            tint = MaterialTheme.colorScheme.error // Rosso per indicare pericolo/uscita
+                            tint = MaterialTheme.colorScheme.error
                         )
                     }
                 }
@@ -137,7 +137,7 @@ fun GruppoScreen(
             )
 
             if (uscite.isEmpty()) {
-                // --- EMPTY STATE USCITE ---
+                // --- EMPTY STATE ---
                 Box(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentAlignment = Alignment.Center
@@ -191,7 +191,6 @@ fun GruppoScreen(
                     Text("Fai scansionare questo QR o invia il codice:", textAlign = TextAlign.Center)
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // QR CODE
                     val qrBitmap = remember(gruppo!!.id) { QrCodeGenerator.generateQrCode(gruppo!!.id) }
                     if (qrBitmap != null) {
                         Image(
@@ -208,6 +207,7 @@ fun GruppoScreen(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         onClick = {
                             clipboardManager.setText(AnnotatedString(gruppo!!.id))
+                            Toast.makeText(context, "Codice copiato!", Toast.LENGTH_SHORT).show()
                         }
                     ) {
                         Text(
@@ -228,14 +228,18 @@ fun GruppoScreen(
             },
             confirmButton = {
                 Button(onClick = {
-                    val link = "carkarma://join/${gruppo!!.id}"
+                    // Usiamo il formato link HTTPS che è:
+                    // 1. Cliccabile su WhatsApp (diventa blu)
+                    // 2. Compatibile col tuo parser in HomeViewModel (cerca l'ultimo slash)
+                    // 3. Gestito dal Deep Link del NavHost se Android lo riconosce
+                    val link = "https://carkarma.app/join/${gruppo!!.id}"
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, "Unisciti al mio gruppo su CarKarma! Codice: ${gruppo!!.id}\nLink: $link")
+                        putExtra(Intent.EXTRA_TEXT, "Unisciti al mio gruppo su CarKarma! Clicca qui: $link")
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "Invia invito..."))
                 }) {
-                    Text("Invia Link/Codice")
+                    Text("Invia Link")
                 }
             },
             dismissButton = {
@@ -254,7 +258,6 @@ fun GruppoScreen(
                 Button(
                     onClick = {
                         viewModel.lasciaGruppo {
-                            // Torna alla home e rimuovi questa schermata dallo stack
                             navController.popBackStack()
                         }
                         showLeaveDialog = false
@@ -274,12 +277,16 @@ fun GruppoScreen(
 @Composable
 fun UscitaCard(uscita: it.col.mar.android.carkarma.data.model.Uscita, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Icona Mappa
@@ -310,6 +317,7 @@ fun UscitaCard(uscita: it.col.mar.android.carkarma.data.model.Uscita, onClick: (
                 )
             }
 
+            // Badge KM
             Surface(
                 color = MaterialTheme.colorScheme.background,
                 shape = MaterialTheme.shapes.small
