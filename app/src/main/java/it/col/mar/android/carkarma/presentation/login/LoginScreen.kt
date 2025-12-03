@@ -2,6 +2,7 @@ package it.col.mar.android.carkarma.presentation.login
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -23,18 +25,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import it.col.mar.android.carkarma.R
 
 @Composable
 fun LoginScreen(
     state: LoginState,
-    onSignInClick: () -> Unit, // Callback per Google
+    onSignInClick: () -> Unit, // Callback per il click sul tasto Google
     viewModel: LoginViewModel = viewModel() // Iniettiamo il VM per chiamare le funzioni email
 ) {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
-    // Mostra errori (Toast) se qualcosa va storto
+    // Mostra errori (Toast) se qualcosa va storto (es. password errata)
     LaunchedEffect(key1 = state.signInError) {
         state.signInError?.let { error ->
             Toast.makeText(context, error, Toast.LENGTH_LONG).show()
@@ -55,7 +58,7 @@ fun LoginScreen(
         Icon(
             imageVector = Icons.Default.AccountCircle,
             contentDescription = null,
-            modifier = Modifier.size(80.dp),
+            modifier = Modifier.size(100.dp),
             tint = MaterialTheme.colorScheme.primary
         )
 
@@ -97,23 +100,27 @@ fun LoginScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // --- BOTTONI REGISTRATI / ACCEDI ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            OutlinedButton(
-                onClick = { viewModel.signUpWithEmail(email, password) },
-                modifier = Modifier.weight(1f).height(50.dp)
+        // --- BOTTONI AZIONE (O LOADING) ---
+        if (state.isLoading) {
+            CircularProgressIndicator()
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Registrati")
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Button(
-                onClick = { viewModel.signInWithEmail(email, password) },
-                modifier = Modifier.weight(1f).height(50.dp)
-            ) {
-                Text("Accedi")
+                OutlinedButton(
+                    onClick = { viewModel.signUpWithEmail(email, password) },
+                    modifier = Modifier.weight(1f).height(50.dp)
+                ) {
+                    Text("Registrati")
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Button(
+                    onClick = { viewModel.signInWithEmail(email, password) },
+                    modifier = Modifier.weight(1f).height(50.dp)
+                ) {
+                    Text("Accedi")
+                }
             }
         }
 
@@ -128,14 +135,34 @@ fun LoginScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // --- BOTTONE GOOGLE ---
+        // --- BOTTONE GOOGLE STILE UFFICIALE ---
         Button(
             onClick = onSignInClick,
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            border = BorderStroke(1.dp, Color.LightGray)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.White, // Sfondo Bianco classico Google
+                contentColor = Color.Black    // Testo Nero
+            ),
+            border = BorderStroke(1.dp, Color.LightGray), // Bordino sottile
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
         ) {
-            Text("Continua con Google", color = MaterialTheme.colorScheme.onSurface)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Immagine ufficiale (Assicurati di avere ic_google_logo in res/drawable)
+                Image(
+                    painter = painterResource(id = R.drawable.ic_google_logo),
+                    contentDescription = "Google Logo",
+                    modifier = Modifier.size(24.dp)
+                )
+
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    "Continua con Google",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(32.dp))

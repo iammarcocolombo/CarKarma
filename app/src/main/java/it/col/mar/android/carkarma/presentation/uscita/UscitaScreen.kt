@@ -31,18 +31,18 @@ fun UscitaScreen(
         viewModel.loadUscita(gruppoId, uscitaId)
     }
 
-    // --- STATI UI ---
+    // Stati generali
     val nomeUscita by viewModel.nomeUscita.collectAsState()
     val amiciDelGruppo by viewModel.amiciDelGruppo.collectAsState()
     val partecipantiSelezionati by viewModel.partecipantiSelezionati.collectAsState()
     val guidatoriSelezionati by viewModel.guidatoriSelezionati.collectAsState()
     val kmTotali by viewModel.kmTotali.collectAsState()
 
-    // Stati Mappe & Calcolo
+    // Stati per Mappe
     val partenza by viewModel.indirizzoPartenza.collectAsState()
     val destinazione by viewModel.indirizzoDestinazione.collectAsState()
-    val isAndataRitorno by viewModel.isAndataRitorno.collectAsState()
     val isLoadingMaps by viewModel.isLoadingMaps.collectAsState()
+    val isAndataRitorno by viewModel.isAndataRitorno.collectAsState()
 
     // Stati Dialog
     val suggerimento by viewModel.suggerimentoGuidatore.collectAsState()
@@ -51,12 +51,12 @@ fun UscitaScreen(
     var showEliminaDialog by remember { mutableStateOf(false) }
     val isEditing = uscitaId.isNotEmpty()
 
-    // Validazione
+    // Validazione per il pulsante Salva
     val isFormValid = nomeUscita.isNotBlank() && kmTotali > 0 &&
             partecipantiSelezionati.isNotEmpty() &&
             guidatoriSelezionati.isNotEmpty()
 
-    // Scroll dell'intera pagina
+    // Stato per lo scroll dell'intera pagina
     val scrollState = rememberScrollState()
 
     Column(
@@ -65,7 +65,7 @@ fun UscitaScreen(
             .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
-        // --- TITOLO ---
+        // Intestazione
         Text(
             text = if (isEditing) "Modifica Uscita" else "Nuova Uscita",
             style = MaterialTheme.typography.headlineSmall,
@@ -73,7 +73,7 @@ fun UscitaScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        // --- CAMPO NOME ---
+        // Campo Nome
         OutlinedTextField(
             value = nomeUscita,
             onValueChange = { viewModel.onNomeUscitaChange(it) },
@@ -84,7 +84,7 @@ fun UscitaScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // --- SEZIONE PERCORSO E KM ---
+        // --- SEZIONE PERCORSO ---
         Text(
             text = "Percorso",
             style = MaterialTheme.typography.titleMedium,
@@ -92,7 +92,9 @@ fun UscitaScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        OutlinedCard(
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 // Campi Indirizzo
                 Row(modifier = Modifier.fillMaxWidth()) {
@@ -120,7 +122,6 @@ fun UscitaScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Il bottone per calcolare appare solo se è una NUOVA uscita
                     if (!isEditing) {
                         Button(
                             onClick = { viewModel.calcolaDistanzaDaMaps() },
@@ -144,11 +145,10 @@ fun UscitaScreen(
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                     } else {
-                        // Se siamo in modifica, riempiamo lo spazio a sinistra
                         Spacer(modifier = Modifier.weight(1f))
                     }
 
-                    // Switch A/R (Sempre visibile)
+                    // Switch A/R
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "A/R",
@@ -164,7 +164,7 @@ fun UscitaScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Campo KM (Editabile)
+                // Campo KM
                 OutlinedTextField(
                     value = if (kmTotali == 0) "" else kmTotali.toString(),
                     onValueChange = { text ->
@@ -187,7 +187,9 @@ fun UscitaScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        OutlinedCard(
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
                 if (amiciDelGruppo.isEmpty()) {
                     Text("Nessun amico nel gruppo.", modifier = Modifier.padding(16.dp))
@@ -198,7 +200,7 @@ fun UscitaScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { viewModel.togglePartecipanteSelezionato(amico.id) }
-                                .padding(horizontal = 8.dp, vertical = 0.dp) // Padding ridotto per compattezza
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Checkbox(
                                 checked = partecipantiSelezionati.contains(amico.id),
@@ -216,8 +218,7 @@ fun UscitaScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- BOTTONE SUGGERIMENTO ---
-        // Solo per nuove uscite e con min. 2 partecipanti
+        // --- BOTTONE SUGGERIMENTO ALGORITMO ---
         if (!isEditing && partecipantiSelezionati.size >= 2) {
             OutlinedButton(
                 onClick = { viewModel.calcolaSuggerimento() },
@@ -252,7 +253,7 @@ fun UscitaScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { viewModel.toggleGuidatoreSelezionato(amico.id) }
-                                .padding(horizontal = 8.dp, vertical = 0.dp)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Checkbox(
                                 checked = guidatoriSelezionati.contains(amico.id),
@@ -267,7 +268,7 @@ fun UscitaScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // --- TASTO SALVA ---
+        // --- SALVATAGGIO ---
         Button(
             onClick = { viewModel.salvaUscita { navController.popBackStack() } },
             enabled = isFormValid,
@@ -278,7 +279,6 @@ fun UscitaScreen(
             Text("Salva Uscita")
         }
 
-        // --- TASTO ELIMINA (Solo Modifica) ---
         if (isEditing) {
             Spacer(modifier = Modifier.height(16.dp))
             TextButton(
@@ -290,17 +290,32 @@ fun UscitaScreen(
             }
         }
 
-        // Spazio extra per lo scroll
         Spacer(modifier = Modifier.height(32.dp))
     }
 
-    // --- DIALOGHI ---
+    // --- DIALOG SUGGERIMENTO (CORRETTO CENTRATURA) ---
     if (suggerimento != null) {
         AlertDialog(
             onDismissRequest = { viewModel.resetSuggerimento() },
-            title = { Text("L'algoritmo consiglia...") },
-            text = { Text(suggerimento ?: "", textAlign = TextAlign.Center) },
-            confirmButton = { TextButton(onClick = { viewModel.resetSuggerimento() }) { Text("OK") } },
+            title = {
+                Text(
+                    text = "L'algoritmo consiglia...",
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth() // Centra il titolo
+                )
+            },
+            text = {
+                Text(
+                    text = suggerimento ?: "",
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth() // Centra il testo del messaggio
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.resetSuggerimento() }) {
+                    Text("OK")
+                }
+            },
             icon = { Icon(Icons.Default.Info, contentDescription = null) }
         )
     }
@@ -319,7 +334,7 @@ fun UscitaScreen(
         AlertDialog(
             onDismissRequest = { showEliminaDialog = false },
             title = { Text("Eliminare?") },
-            text = { Text("L'operazione è irreversibile e i km verranno rimossi dalle statistiche.") },
+            text = { Text("L'operazione è irreversibile.") },
             confirmButton = {
                 Button(
                     onClick = { viewModel.eliminaUscita { navController.popBackStack() }; showEliminaDialog = false },
