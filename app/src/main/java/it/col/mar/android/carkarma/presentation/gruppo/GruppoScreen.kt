@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
@@ -22,7 +23,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily // Import aggiunto
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,7 +36,6 @@ fun GruppoScreen(
     gruppoId: String,
     viewModel: GruppoViewModel
 ) {
-    // Carichiamo i dati del gruppo appena entriamo
     LaunchedEffect(gruppoId) {
         viewModel.loadGruppo(gruppoId)
     }
@@ -47,8 +47,9 @@ fun GruppoScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
-    // Stato per il Dialog di Condivisione
     var showShareDialog by remember { mutableStateOf(false) }
+    // Stato per il Dialog di conferma uscita dal gruppo
+    var showLeaveDialog by remember { mutableStateOf(false) }
 
     if (errorMessage != null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -102,23 +103,24 @@ fun GruppoScreen(
                     )
                 }
 
-                // AZIONI
+                // AZIONI: Invita, Modifica, Esci
                 Row {
-                    // Tasto Invita (Dialog)
+                    // Tasto Invita
                     IconButton(onClick = { showShareDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Invita Amici",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                        Icon(Icons.Default.Share, "Invita", tint = MaterialTheme.colorScheme.primary)
                     }
 
                     // Tasto Modifica
                     IconButton(onClick = { navController.navigate("modificaGruppo?gruppoId=${gruppo!!.id}") }) {
+                        Icon(Icons.Default.Edit, "Modifica", tint = MaterialTheme.colorScheme.primary)
+                    }
+
+                    // Tasto Lascia Gruppo
+                    IconButton(onClick = { showLeaveDialog = true }) {
                         Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Modifica Gruppo",
-                            tint = MaterialTheme.colorScheme.primary
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = "Lascia Gruppo",
+                            tint = MaterialTheme.colorScheme.error // Rosso per indicare pericolo/uscita
                         )
                     }
                 }
@@ -135,7 +137,7 @@ fun GruppoScreen(
             )
 
             if (uscite.isEmpty()) {
-                // --- EMPTY STATE ---
+                // --- EMPTY STATE USCITE ---
                 Box(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentAlignment = Alignment.Center
@@ -148,16 +150,8 @@ fun GruppoScreen(
                             tint = MaterialTheme.colorScheme.surfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Nessun viaggio registrato.",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Aggiungi la prima uscita!",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text("Nessun viaggio registrato.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Aggiungi la prima uscita!", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             } else {
@@ -198,22 +192,18 @@ fun GruppoScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // QR CODE
-                    // Genera il QR solo una volta per performance
                     val qrBitmap = remember(gruppo!!.id) { QrCodeGenerator.generateQrCode(gruppo!!.id) }
-
                     if (qrBitmap != null) {
                         Image(
                             bitmap = qrBitmap.asImageBitmap(),
-                            contentDescription = "QR Code Gruppo",
-                            modifier = Modifier
-                                .size(200.dp)
-                                .padding(8.dp)
+                            contentDescription = "QR Code",
+                            modifier = Modifier.size(200.dp).padding(8.dp)
                         )
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // CODICE TESTUALE (Cliccabile per copiare)
+                    // CODICE TESTUALE
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         onClick = {
@@ -223,7 +213,6 @@ fun GruppoScreen(
                         Text(
                             text = gruppo!!.id,
                             style = MaterialTheme.typography.titleMedium,
-                            // CORREZIONE: Usa FontFamily.Monospace invece di FontWeight.Mono
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(16.dp)
@@ -239,7 +228,6 @@ fun GruppoScreen(
             },
             confirmButton = {
                 Button(onClick = {
-                    // Link personalizzato
                     val link = "carkarma://join/${gruppo!!.id}"
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
@@ -247,11 +235,37 @@ fun GruppoScreen(
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "Invia invito..."))
                 }) {
-                    Text("Invia Link")
+                    Text("Invia Link/Codice")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showShareDialog = false }) { Text("Chiudi") }
+            }
+        )
+    }
+
+    // --- DIALOG CONFERMA USCITA ---
+    if (showLeaveDialog) {
+        AlertDialog(
+            onDismissRequest = { showLeaveDialog = false },
+            title = { Text("Lasciare il gruppo?") },
+            text = { Text("Se esci, non vedrai più questo gruppo nella tua Home, ma i dati non verranno cancellati per gli altri partecipanti.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.lasciaGruppo {
+                            // Torna alla home e rimuovi questa schermata dallo stack
+                            navController.popBackStack()
+                        }
+                        showLeaveDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Lascia Gruppo")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLeaveDialog = false }) { Text("Annulla") }
             }
         )
     }
@@ -260,16 +274,12 @@ fun GruppoScreen(
 @Composable
 fun UscitaCard(uscita: it.col.mar.android.carkarma.data.model.Uscita, onClick: () -> Unit) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Icona Mappa
@@ -300,7 +310,6 @@ fun UscitaCard(uscita: it.col.mar.android.carkarma.data.model.Uscita, onClick: (
                 )
             }
 
-            // Badge KM
             Surface(
                 color = MaterialTheme.colorScheme.background,
                 shape = MaterialTheme.shapes.small

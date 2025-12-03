@@ -26,14 +26,17 @@ class GruppoViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
 
+    private var currentGruppoId: String = ""
+
     fun loadGruppo(gruppoId: String) {
+        this.currentGruppoId = gruppoId
         viewModelScope.launch {
             if (gruppoId.isEmpty()) {
                 _errorMessage.value = "ID gruppo non valido"
                 return@launch
             }
 
-            // Carica info Gruppo
+            // 1. Carica i dettagli del Gruppo
             val g = gruppoRepository.getGruppoPerId(gruppoId)
             if (g == null) {
                 _errorMessage.value = "Gruppo non trovato"
@@ -42,9 +45,25 @@ class GruppoViewModel(
                 _errorMessage.value = null
                 _gruppo.value = g
 
-                // Carica Uscite collegate in tempo reale
+                // 2. Ascolta le uscite di questo gruppo in tempo reale
+                // (Nota: usa getUsciteDelGruppo che abbiamo aggiunto nel UscitaRepository)
                 uscitaRepository.getUsciteDelGruppo(gruppoId).collect { listaUscite ->
                     _uscite.value = listaUscite
+                }
+            }
+        }
+    }
+
+    // Funzione per dissociarsi dal gruppo (rimuove il proprio ID dalla lista utenti)
+    fun lasciaGruppo(onLasciato: () -> Unit) {
+        if (currentGruppoId.isNotEmpty()) {
+            viewModelScope.launch {
+                gruppoRepository.lasciaGruppo(currentGruppoId) { successo ->
+                    if (successo) {
+                        onLasciato()
+                    } else {
+                        _errorMessage.value = "Impossibile lasciare il gruppo. Riprova."
+                    }
                 }
             }
         }
