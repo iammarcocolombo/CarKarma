@@ -10,13 +10,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -27,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import it.col.mar.android.carkarma.R
+import it.col.mar.android.carkarma.data.database.AppContainer
 import it.col.mar.android.carkarma.ui.theme.CarKarmaTheme
 import it.col.mar.android.carkarma.util.UserData
 import kotlinx.coroutines.launch
@@ -38,23 +42,27 @@ fun AppScaffold(
     title: String = stringResource(R.string.app_name),
     userData: UserData? = null,
     onSignOut: () -> Unit = {},
+    onDeleteAccount: () -> Unit = {}, // Nuova callback per eliminazione
     content: @Composable (PaddingValues) -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
-    // Determiniamo se mostrare la TopBar e il Drawer (nascondiamoli nel Login)
+    // Determiniamo se mostrare le barre di navigazione (nascoste nel login)
     val navBackStackEntry = navController?.currentBackStackEntryAsState()?.value
     val currentRoute = navBackStackEntry?.destination?.route
-    val showBars = currentRoute != "login"
+    // Nascondiamo barre se siamo nel login o se la rotta non è ancora definita
+    val showBars = currentRoute != "login" && currentRoute != null
 
     // TRUCCO PER IL DRAWER A DESTRA (END DRAWER)
+    // Invertiamo il layout del contenitore del drawer per farlo aprire da destra
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         ModalNavigationDrawer(
             drawerState = drawerState,
-            gesturesEnabled = showBars, // Disabilita swipe nel login
+            gesturesEnabled = showBars, // Disabilita lo swipe laterale nella schermata di login
             drawerContent = {
-                // Ripristiniamo direzione LTR per il contenuto del menu
+                // Ripristiniamo la direzione LTR (sinistra -> destra) per il contenuto del menu
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     if (showBars) {
                         ModalDrawerSheet {
@@ -92,7 +100,7 @@ fun AppScaffold(
                                     )
                                 }
                                 Text(
-                                    text = "Profilo Google",
+                                    text = userData?.email ?: "Profilo Google",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -100,11 +108,25 @@ fun AppScaffold(
 
                             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-                            // --- LOGOUT ---
+                            // --- MENU ITEMS ---
+
+                            NavigationDrawerItem(
+                                label = { Text("Privacy Policy") },
+                                selected = false,
+                                icon = { Icon(Icons.Default.PrivacyTip, null) },
+                                onClick = {
+                                    scope.launch {
+                                        drawerState.close()
+                                        navController?.navigate("privacy")
+                                    }
+                                },
+                                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                            )
+
                             NavigationDrawerItem(
                                 label = { Text("Esci dall'account") },
                                 selected = false,
-                                icon = { Icon(Icons.Default.ExitToApp, null) },
+                                icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, null) },
                                 onClick = {
                                     scope.launch {
                                         drawerState.close()
@@ -113,12 +135,30 @@ fun AppScaffold(
                                 },
                                 modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                             )
+
+                            Spacer(modifier = Modifier.weight(1f))
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                            // TASTO ELIMINA ACCOUNT (Rosso)
+                            NavigationDrawerItem(
+                                label = { Text("Elimina Account", color = MaterialTheme.colorScheme.error) },
+                                selected = false,
+                                icon = { Icon(Icons.Default.DeleteForever, null, tint = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    scope.launch {
+                                        drawerState.close()
+                                        showDeleteConfirmDialog = true
+                                    }
+                                },
+                                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
                         }
                     }
                 }
             },
             content = {
-                // Ripristiniamo LTR per il contenuto dell'app
+                // Ripristiniamo la direzione LTR per il contenuto principale dell'app
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     Scaffold(
                         topBar = {
@@ -153,6 +193,30 @@ fun AppScaffold(
                     }
                 }
             }
+        )
+    }
+
+    // Dialog di conferma eliminazione account
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text("Eliminare l'account?") },
+            text = { Text("Questa azione è irreversibile. I tuoi dati personali verranno rimossi, ma i dati nei gruppi condivisi potrebbero rimanere visibili agli altri membri per mantenere lo storico.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        onDeleteAccount()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Elimina Definitivamente")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) { Text("Annulla") }
+            },
+            icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) }
         )
     }
 }

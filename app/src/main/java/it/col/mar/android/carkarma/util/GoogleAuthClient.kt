@@ -23,7 +23,7 @@ class GoogleAuthClient(
             userId = uid,
             username = displayName,
             profilePictureUrl = photoUrl?.toString(),
-            email = email // Recuperiamo l'email!
+            email = email // Recuperiamo l'email per gli inviti
         )
     }
 
@@ -35,7 +35,8 @@ class GoogleAuthClient(
                         BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
                             .setSupported(true)
                             .setFilterByAuthorizedAccounts(false)
-                            .setServerClientId("1044359789646-f16h1b150i30rva1b14u2h1i390c17mq.apps.googleusercontent.com") // <-- RIMETTI IL TUO ID QUI
+                            // MODIFICA: Legge l'ID dal file Config!
+                            .setServerClientId(Config.GOOGLE_WEB_CLIENT_ID)
                             .build()
                     )
                     .setAutoSelectEnabled(true)
@@ -62,7 +63,7 @@ class GoogleAuthClient(
                         userId = uid,
                         username = displayName,
                         profilePictureUrl = photoUrl?.toString(),
-                        email = email // Recuperiamo l'email anche qui
+                        email = email
                     )
                 },
                 errorMessage = null
@@ -82,6 +83,17 @@ class GoogleAuthClient(
             e.printStackTrace()
         }
     }
+
+    suspend fun deleteAccount(): Boolean {
+        return try {
+            oneTapClient.signOut().await()
+            auth.currentUser?.delete()?.await()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
 }
 
 data class SignInResult(
@@ -93,5 +105,5 @@ data class UserData(
     val userId: String,
     val username: String?,
     val profilePictureUrl: String?,
-    val email: String? // <--- QUESTO CAMPO ERA QUELLO MANCANTE
+    val email: String?
 )

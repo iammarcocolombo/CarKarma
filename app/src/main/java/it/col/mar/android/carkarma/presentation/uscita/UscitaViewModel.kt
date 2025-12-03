@@ -8,6 +8,7 @@ import it.col.mar.android.carkarma.data.database.UscitaRepository
 import it.col.mar.android.carkarma.data.model.Amico
 import it.col.mar.android.carkarma.data.model.Uscita
 import it.col.mar.android.carkarma.domain.CalcoloTurnoUseCase
+import it.col.mar.android.carkarma.util.Config
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,8 +24,8 @@ class UscitaViewModel(
     private val gruppoRepository: GruppoRepository
 ) : ViewModel() {
 
-    // TODO: Incolla qui la tua API Key di OpenRouteService (o Google Maps se hai cambiato idea)
-    private val ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImQ0ZWE5MWY0MWQ5YjQ4NjQ4M2Q2NmUzYzU3YzBlOTE2IiwiaCI6Im11cm11cjY0In0="
+    // Usa la chiave dal file di configurazione
+    private val ORS_API_KEY = Config.ORS_API_KEY
 
     private val calcoloUseCase = CalcoloTurnoUseCase()
 
@@ -154,8 +155,8 @@ class UscitaViewModel(
             return
         }
 
-        if (ORS_API_KEY.contains("LA_TUA_CHIAVE")) {
-            _errorMessage.value = "Manca la API Key di ORS nel codice!"
+        if (ORS_API_KEY.contains("YOUR_ORS_API_KEY")) {
+            _errorMessage.value = "Manca la API Key di ORS in Config.kt!"
             return
         }
 

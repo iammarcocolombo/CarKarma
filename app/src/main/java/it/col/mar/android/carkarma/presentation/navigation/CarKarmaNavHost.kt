@@ -42,6 +42,7 @@ import it.col.mar.android.carkarma.presentation.home.HomeScreen
 import it.col.mar.android.carkarma.presentation.login.LoginScreen
 import it.col.mar.android.carkarma.presentation.login.LoginViewModel
 import it.col.mar.android.carkarma.presentation.login.LoginViewModelFactory
+import it.col.mar.android.carkarma.presentation.privacy.PrivacyScreen
 import it.col.mar.android.carkarma.presentation.uscita.UscitaScreen
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModel
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModelFactory
@@ -79,6 +80,9 @@ fun CarKarmaNavHost(
                             val signInResult = googleAuthClient.signInWithIntent(intent = result.data ?: return@launch)
                             viewModel.onSignInResult(signInResult)
                         }
+                    } else {
+                        // AGGIUNTO: Feedback se il login fallisce o viene annullato
+                        Toast.makeText(context, "Login annullato o fallito. Riprova.", Toast.LENGTH_SHORT).show()
                     }
                 }
             )
@@ -106,7 +110,7 @@ fun CarKarmaNavHost(
                     scope.launch {
                         val intentSender = googleAuthClient.signIn()
                         if (intentSender != null) launcher.launch(IntentSenderRequest.Builder(intentSender).build())
-                        else Toast.makeText(context, "Errore configurazione Google", Toast.LENGTH_SHORT).show()
+                        else Toast.makeText(context, "Errore configurazione Google (SHA-1?)", Toast.LENGTH_SHORT).show()
                     }
                 }
             )
@@ -114,9 +118,12 @@ fun CarKarmaNavHost(
 
         // --- HOME SCREEN ---
         composable("home") {
-            // HomeScreen è alleggerita, riceve solo il navController
-            // Il Drawer e la TopBar sono gestiti da AppScaffold/CarKarmaApp
             HomeScreen(navController = navController)
+        }
+
+        // --- PRIVACY POLICY ---
+        composable("privacy") {
+            PrivacyScreen(navController)
         }
 
         // --- JOIN GRUPPO VIA LINK (carkarma://) ---

@@ -25,7 +25,6 @@ class GruppoRepository(
     val gruppi: StateFlow<List<Gruppo>> = _gruppi.asStateFlow()
 
     init {
-        // ASCOLTO FILTRATO PER "UTENTI CON ACCESSO"
         auth.addAuthStateListener { firebaseAuth ->
             val userId = firebaseAuth.currentUser?.uid
 
@@ -50,11 +49,6 @@ class GruppoRepository(
         return _gruppi.value.find { it.id == id }
     }
 
-    // --- FUNZIONE DI SINCRONIZZAZIONE (Fix Errore HomeViewModel) ---
-    /**
-     * Scarica i membri di tutti i gruppi visibili e li importa nella rubrica personale.
-     * Utile quando ci si unisce a un nuovo gruppo per avere subito gli amici disponibili.
-     */
     suspend fun sincronizzaMembriInRubrica(listaGruppi: List<Gruppo>) {
         if (auth.currentUser == null) return
 
@@ -74,7 +68,7 @@ class GruppoRepository(
         }
     }
 
-    // --- GESTIONE MEMBRI (SOTTOCOLLEZIONE) ---
+    // --- GESTIONE MEMBRI ---
 
     fun getMembriDelGruppo(gruppoId: String): Flow<List<Amico>> = callbackFlow {
         val registration = db.collection("gruppi").document(gruppoId).collection("membri")
@@ -90,15 +84,6 @@ class GruppoRepository(
         awaitClose { registration.remove() }
     }
 
-    // Recupera un singolo membro (utile per modifiche mirate)
-    suspend fun getMembro(gruppoId: String, amicoId: String): Amico? {
-        return try {
-            val doc = db.collection("gruppi").document(gruppoId)
-                .collection("membri").document(amicoId).get().await()
-            doc.toObject(Amico::class.java)
-        } catch (e: Exception) { null }
-    }
-
     suspend fun getMembriSnapshot(gruppoId: String): List<Amico> {
         return try {
             val snapshot = db.collection("gruppi").document(gruppoId)
@@ -107,6 +92,14 @@ class GruppoRepository(
         } catch (e: Exception) {
             emptyList()
         }
+    }
+
+    suspend fun getMembro(gruppoId: String, amicoId: String): Amico? {
+        return try {
+            val doc = db.collection("gruppi").document(gruppoId)
+                .collection("membri").document(amicoId).get().await()
+            doc.toObject(Amico::class.java)
+        } catch (e: Exception) { null }
     }
 
     fun aggiungiMembroAlGruppo(gruppoId: String, amicoTemplate: Amico) {
@@ -136,7 +129,6 @@ class GruppoRepository(
         }
     }
 
-    // Aggiorna solo i dati anagrafici (Nome, Posti) nel gruppo senza toccare le statistiche
     fun aggiornaAnagraficaMembro(gruppoId: String, amico: Amico) {
         val docRef = db.collection("gruppi").document(gruppoId).collection("membri").document(amico.id)
         val updates = mapOf(
@@ -151,39 +143,25 @@ class GruppoRepository(
     fun aggiungiGruppo(gruppo: Gruppo) {
         val userId = auth.currentUser?.uid ?: return
         val idFinale = if (gruppo.id.isEmpty()) UUID.randomUUID().toString() else gruppo.id
-
-        // Assicuriamoci che chi crea/modifica non si chiuda fuori
-        val utentiAggiornati = if (gruppo.utentiIds.contains(userId)) {
-            gruppo.utentiIds
-        } else {
-            gruppo.utentiIds + userId
-        }
-
+        val utentiAggiornati = if (gruppo.utentiIds.contains(userId)) gruppo.utentiIds else gruppo.utentiIds + userId
         val gruppoDaSalvare = gruppo.copy(id = idFinale, utentiIds = utentiAggiornati)
         db.collection("gruppi").document(idFinale).set(gruppoDaSalvare)
     }
 
-    fun aggiornaGruppo(gruppo: Gruppo) {
-        aggiungiGruppo(gruppo)
-    }
+    fun aggiornaGruppo(gruppo: Gruppo) { aggiungiGruppo(gruppo) }
 
     fun eliminaGruppo(gruppoId: String) {
         uscitaRepository.eliminaTutteUsciteDelGruppo(gruppoId)
         db.collection("gruppi").document(gruppoId).collection("membri").get()
             .addOnSuccessListener { snapshot ->
-                for (doc in snapshot.documents) {
-                    doc.reference.delete()
-                }
+                for (doc in snapshot.documents) { doc.reference.delete() }
                 db.collection("gruppi").document(gruppoId).delete()
             }
     }
 
     fun lasciaGruppo(gruppoId: String, onResult: (Boolean) -> Unit) {
         val userId = auth.currentUser?.uid
-        if (userId == null) {
-            onResult(false)
-            return
-        }
+        if (userId == null) { onResult(false); return }
         db.collection("gruppi").document(gruppoId)
             .update("utentiIds", FieldValue.arrayRemove(userId))
             .addOnSuccessListener { onResult(true) }
@@ -196,11 +174,7 @@ class GruppoRepository(
 
     fun uniscitiAlGruppo(gruppoId: String, onResult: (Boolean) -> Unit) {
         val userId = auth.currentUser?.uid
-        if (userId == null) {
-            onResult(false)
-            return
-        }
-
+        if (userId == null) { onResult(false); return }
         db.collection("gruppi").document(gruppoId)
             .update("utentiIds", FieldValue.arrayUnion(userId))
             .addOnSuccessListener { onResult(true) }
@@ -211,5 +185,31 @@ class GruppoRepository(
         if (email == null) return
         val userMap = mapOf("uid" to uid, "email" to email, "nome" to nome)
         db.collection("public_users").document(uid).set(userMap)
+    }
+
+    suspend fun eliminaDatiUtentePubblico() {
+        val uid = auth.currentUser?.uid ?: return
+        try {
+            // 1. Elimina profilo pubblico
+            db.collection("public_users").document(uid).delete().await()
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    // NUOVO: Rimuove l'utente da TUTTI i gruppi (Pulizia profonda)
+    suspend fun rimuoviUtenteDaTuttiIGruppi() {
+        val uid = auth.currentUser?.uid ?: return
+        try {
+            // Cerca tutti i gruppi dove sono membro
+            val snapshot = db.collection("gruppi")
+                .whereArrayContains("utentiIds", uid)
+                .get().await()
+
+            // Rimuove il mio ID da ogni gruppo (Batch per efficienza)
+            val batch = db.batch()
+            for (doc in snapshot.documents) {
+                batch.update(doc.reference, "utentiIds", FieldValue.arrayRemove(uid))
+            }
+            batch.commit().await()
+        } catch (e: Exception) { e.printStackTrace() }
     }
 }
