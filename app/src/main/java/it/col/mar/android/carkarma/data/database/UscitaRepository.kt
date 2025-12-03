@@ -2,6 +2,7 @@ package it.col.mar.android.carkarma.data.database
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.toObject
 import com.google.firebase.firestore.toObjects
 import it.col.mar.android.carkarma.data.model.Uscita
@@ -16,15 +17,13 @@ class UscitaRepository(
     private val auth: FirebaseAuth
 ) {
 
-    // NON carichiamo più tutte le uscite del mondo in una lista globale.
-    // Usiamo i Flow per ascoltare solo quello che ci serve.
-
     /**
      * Ascolta in tempo reale le uscite di uno specifico gruppo (Sottocollezione).
+     * ORDINE: Cronologico inverso (dalla più recente alla più vecchia).
      */
     fun getUsciteDelGruppo(gruppoId: String): Flow<List<Uscita>> = callbackFlow {
         val registration = db.collection("gruppi").document(gruppoId).collection("uscite")
-            // Ordiniamo per data (se hai un campo data, altrimenti per nome o id)
+            .orderBy("data", Query.Direction.DESCENDING) // <--- ORDINAMENTO CRONOLOGICO
             .addSnapshotListener { snapshot, e ->
                 if (e != null) {
                     close(e)
@@ -39,7 +38,7 @@ class UscitaRepository(
     }
 
     /**
-     * Recupera una singola uscita (serve sapere il gruppoId per trovarla).
+     * Recupera una singola uscita specifica (serve sapere il gruppoId per trovarla).
      */
     suspend fun getUscita(gruppoId: String, uscitaId: String): Uscita? {
         return try {
@@ -53,9 +52,10 @@ class UscitaRepository(
 
     fun aggiungiUscita(uscita: Uscita) {
         val idFinale = if (uscita.id.isEmpty()) UUID.randomUUID().toString() else uscita.id
+        // Se è una nuova uscita, il model ha già il timestamp 'data' impostato a now().
+        // Se è una modifica, manteniamo la data originale dell'oggetto.
         val uscitaDaSalvare = uscita.copy(id = idFinale)
 
-        // Salviamo nella SOTTOCOLLEZIONE: gruppi/{id}/uscite/{id}
         db.collection("gruppi").document(uscita.gruppoId)
             .collection("uscite").document(idFinale)
             .set(uscitaDaSalvare)
@@ -71,11 +71,8 @@ class UscitaRepository(
             .delete()
     }
 
-    // Questa funzione viene chiamata da GruppoRepository quando elimini un gruppo
     fun eliminaTutteUsciteDelGruppo(gruppoId: String) {
         val collectionRef = db.collection("gruppi").document(gruppoId).collection("uscite")
-
-        // Firestore richiede di scaricare i documenti per cancellarli uno a uno
         collectionRef.get().addOnSuccessListener { snapshot ->
             for (doc in snapshot.documents) {
                 doc.reference.delete()

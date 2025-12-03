@@ -9,6 +9,7 @@ data class Uscita(
     val guidatoriIds: List<String> = emptyList(),
     val partenza: String = "",
     val destinazione: String = "",
-    // Nuovo campo: Default a true come richiesto
-    val andataRitorno: Boolean = true
+    val andataRitorno: Boolean = true,
+    // AGGIUNTO: Timestamp per ordinare (default: adesso)
+    val data: Long = System.currentTimeMillis()
 )

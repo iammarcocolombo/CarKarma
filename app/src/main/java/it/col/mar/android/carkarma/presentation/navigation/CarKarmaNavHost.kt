@@ -71,7 +71,6 @@ fun CarKarmaNavHost(
             val state by viewModel.state.collectAsState()
             val scope = rememberCoroutineScope()
 
-            // Launcher per gestire il risultato dell'intent di Google Sign-In
             val launcher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.StartIntentSenderForResult(),
                 onResult = { result ->
@@ -86,17 +85,15 @@ fun CarKarmaNavHost(
 
             LaunchedEffect(key1 = state.isSignInSuccessful) {
                 if (state.isSignInSuccessful) {
-                    // Notifica l'app principale che il login è avvenuto (per aggiornare il drawer)
-                    // e salva l'utente nel DB pubblico per renderlo cercabile
                     googleAuthClient.getSignedInUser()?.let { user ->
                         onLoginSuccess(user)
+                        // Salviamo l'utente nel DB pubblico per permettere gli inviti
                         AppContainer.gruppoRepository.rendiUtenteCercabile(user.userId, user.email, user.username)
                     }
 
                     Toast.makeText(context, "Accesso effettuato!", Toast.LENGTH_LONG).show()
 
                     navController.navigate("home") {
-                        // Rimuove la schermata di login dal backstack
                         popUpTo("login") { inclusive = true }
                     }
                     viewModel.resetState()
@@ -109,7 +106,7 @@ fun CarKarmaNavHost(
                     scope.launch {
                         val intentSender = googleAuthClient.signIn()
                         if (intentSender != null) launcher.launch(IntentSenderRequest.Builder(intentSender).build())
-                        else Toast.makeText(context, "Errore configurazione Google (SHA-1?)", Toast.LENGTH_SHORT).show()
+                        else Toast.makeText(context, "Errore configurazione Google", Toast.LENGTH_SHORT).show()
                     }
                 }
             )
@@ -195,8 +192,7 @@ fun CarKarmaNavHost(
 
         // --- DETTAGLIO AMICO (NUOVO O MODIFICA) ---
         composable(
-            // AGGIORNATO: Accetta sia amicoId che gruppoId opzionali
-            route = "amico?amicoId={amicoId}&gruppoId={gruppoId}",
+            route = "amico?amicoId={amicoId}&gruppoId={gruppoId}", // Accetta gruppoId opzionale
             arguments = listOf(
                 navArgument("amicoId") { type = NavType.StringType; defaultValue = "" },
                 navArgument("gruppoId") { type = NavType.StringType; defaultValue = "" }
@@ -206,15 +202,12 @@ fun CarKarmaNavHost(
             val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
 
             val vm: AmicoViewModel = viewModel(
-                factory = AmicoViewModelFactory(
-                    AppContainer.amicoRepository,
-                    AppContainer.gruppoRepository
-                )
+                factory = AmicoViewModelFactory(AppContainer.amicoRepository, AppContainer.gruppoRepository)
             )
             // Carica l'amico dal contesto giusto (globale o gruppo)
             vm.loadAmico(amicoId, gruppoId)
 
-            AmicoScreen(navController, amicoId, vm)
+            AmicoScreen(navController, amicoId, vm, gruppoId)
         }
     }
 }
