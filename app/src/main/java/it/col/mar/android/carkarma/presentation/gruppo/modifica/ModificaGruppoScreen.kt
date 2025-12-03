@@ -121,9 +121,12 @@ fun ModificaGruppoScreen(
                     )
 
                     // Tasto per modificare al volo l'amico
+                    // Dentro ModificaGruppoScreen.kt
                     IconButton(onClick = {
-                        // LINK CORRETTO: Modifica amico esistente
-                        navController.navigate("amico?amicoId=${amico.id}")
+                        // CORREZIONE: Passiamo anche il gruppoId corrente!
+                        // Nota: Se stiamo creando un gruppo nuovo (gruppoId vuoto), modifichiamo la versione globale (corretto).
+                        // Se il gruppo esiste, passiamo il suo ID così modifichiamo l'istanza nel gruppo.
+                        navController.navigate("amico?amicoId=${amico.id}&gruppoId=$gruppoId")
                     }) {
                         Icon(Icons.Default.Edit, contentDescription = "Modifica Amico")
                     }

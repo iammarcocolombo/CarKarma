@@ -27,7 +27,6 @@ class GruppoRepository(
     init {
         auth.addAuthStateListener { firebaseAuth ->
             val userId = firebaseAuth.currentUser?.uid
-
             if (userId != null) {
                 db.collection("gruppi")
                     .whereArrayContains("utentiIds", userId)
@@ -49,40 +48,24 @@ class GruppoRepository(
         return _gruppi.value.find { it.id == id }
     }
 
-    // --- FUNZIONE MANCANTE REINSERITA ---
-    suspend fun sincronizzaMembriInRubrica(listaGruppi: List<Gruppo>) {
-        if (auth.currentUser == null) return
-
-        listaGruppi.forEach { gruppo ->
-            try {
-                val snapshot = db.collection("gruppi").document(gruppo.id)
-                    .collection("membri").get().await()
-
-                val membriDelGruppo = snapshot.toObjects<Amico>()
-
-                if (membriDelGruppo.isNotEmpty()) {
-                    amicoRepository.importaAmici(membriDelGruppo)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
     // --- GESTIONE MEMBRI ---
 
     fun getMembriDelGruppo(gruppoId: String): Flow<List<Amico>> = callbackFlow {
         val registration = db.collection("gruppi").document(gruppoId).collection("membri")
             .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    close(e)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    trySend(snapshot.toObjects<Amico>())
-                }
+                if (e != null) { close(e); return@addSnapshotListener }
+                if (snapshot != null) { trySend(snapshot.toObjects<Amico>()) }
             }
         awaitClose { registration.remove() }
+    }
+
+    // Recupera un singolo membro dal gruppo (utile per Modifica Amico dentro il gruppo)
+    suspend fun getMembro(gruppoId: String, amicoId: String): Amico? {
+        return try {
+            val doc = db.collection("gruppi").document(gruppoId)
+                .collection("membri").document(amicoId).get().await()
+            doc.toObject(Amico::class.java)
+        } catch (e: Exception) { null }
     }
 
     suspend fun getMembriSnapshot(gruppoId: String): List<Amico> {
@@ -90,17 +73,11 @@ class GruppoRepository(
             val snapshot = db.collection("gruppi").document(gruppoId)
                 .collection("membri").get().await()
             snapshot.toObjects<Amico>()
-        } catch (e: Exception) {
-            emptyList()
-        }
+        } catch (e: Exception) { emptyList() }
     }
 
     fun aggiungiMembroAlGruppo(gruppoId: String, amicoTemplate: Amico) {
-        val nuovoMembro = amicoTemplate.copy(
-            uscite = 0,
-            guide = 0,
-            km = 0
-        )
+        val nuovoMembro = amicoTemplate.copy(uscite = 0, guide = 0, km = 0)
         db.collection("gruppi").document(gruppoId)
             .collection("membri").document(nuovoMembro.id)
             .set(nuovoMembro)
@@ -110,6 +87,17 @@ class GruppoRepository(
         db.collection("gruppi").document(gruppoId)
             .collection("membri").document(amicoId)
             .delete()
+    }
+
+    // NUOVO: Aggiorna i dati anagrafici (Nome, Posti) di un membro dentro il gruppo
+    fun aggiornaAnagraficaMembro(gruppoId: String, amico: Amico) {
+        val docRef = db.collection("gruppi").document(gruppoId).collection("membri").document(amico.id)
+        // Aggiorniamo solo i campi anagrafici, lasciando stare le statistiche se non le passiamo
+        val updates = mapOf(
+            "nome" to amico.nome,
+            "postiAuto" to amico.postiAuto
+        )
+        docRef.update(updates)
     }
 
     fun aggiornaStatisticheMembro(gruppoId: String, amicoId: String, deltaUscite: Int, deltaGuide: Int, deltaKm: Int) {
@@ -131,38 +119,39 @@ class GruppoRepository(
     fun aggiungiGruppo(gruppo: Gruppo) {
         val userId = auth.currentUser?.uid ?: return
         val idFinale = if (gruppo.id.isEmpty()) UUID.randomUUID().toString() else gruppo.id
-        val utentiAggiornati = if (gruppo.utentiIds.contains(userId)) {
-            gruppo.utentiIds
+
+        // LOGICA DI ACCESSO CORRETTA:
+        // Se stiamo modificando, NON DOBBIAMO PERDERE GLI ALTRI UTENTI!
+        // Qui sovrascriviamo solo se è un nuovo inserimento.
+        // Ma aspetta: Firestore 'set' sovrascrive tutto. Dobbiamo assicurarci che l'oggetto 'gruppo' passato
+        // contenga già la lista completa degli utentiIds.
+        // (Questo lo gestiamo nel ViewModel ora, ma qui facciamo un controllo di sicurezza per la creazione).
+
+        val utentiAggiornati = if (gruppo.utentiIds.isEmpty()) {
+            // Se la lista è vuota, è un nuovo gruppo -> aggiungo me stesso
+            listOf(userId)
         } else {
-            gruppo.utentiIds + userId
+            // Se la lista c'è già (modifica), mi assicuro di non auto-escludermi per sbaglio
+            if (!gruppo.utentiIds.contains(userId)) gruppo.utentiIds + userId else gruppo.utentiIds
         }
 
         val gruppoDaSalvare = gruppo.copy(id = idFinale, utentiIds = utentiAggiornati)
         db.collection("gruppi").document(idFinale).set(gruppoDaSalvare)
     }
 
-    fun aggiornaGruppo(gruppo: Gruppo) {
-        aggiungiGruppo(gruppo)
-    }
+    fun aggiornaGruppo(gruppo: Gruppo) { aggiungiGruppo(gruppo) }
 
     fun eliminaGruppo(gruppoId: String) {
         uscitaRepository.eliminaTutteUsciteDelGruppo(gruppoId)
         db.collection("gruppi").document(gruppoId).collection("membri").get()
             .addOnSuccessListener { snapshot ->
-                for (doc in snapshot.documents) {
-                    doc.reference.delete()
-                }
+                for (doc in snapshot.documents) { doc.reference.delete() }
                 db.collection("gruppi").document(gruppoId).delete()
             }
     }
 
     fun lasciaGruppo(gruppoId: String, onResult: (Boolean) -> Unit) {
-        val userId = auth.currentUser?.uid
-        if (userId == null) {
-            onResult(false)
-            return
-        }
-
+        val userId = auth.currentUser?.uid ?: return
         db.collection("gruppi").document(gruppoId)
             .update("utentiIds", FieldValue.arrayRemove(userId))
             .addOnSuccessListener { onResult(true) }
@@ -174,12 +163,7 @@ class GruppoRepository(
     // --- CONDIVISIONE ---
 
     fun uniscitiAlGruppo(gruppoId: String, onResult: (Boolean) -> Unit) {
-        val userId = auth.currentUser?.uid
-        if (userId == null) {
-            onResult(false)
-            return
-        }
-
+        val userId = auth.currentUser?.uid ?: return
         db.collection("gruppi").document(gruppoId)
             .update("utentiIds", FieldValue.arrayUnion(userId))
             .addOnSuccessListener { onResult(true) }

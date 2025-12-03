@@ -21,6 +21,7 @@ class ModificaGruppoViewModel(
     val nomeGruppo: StateFlow<String> = _nomeGruppo
 
     // Gli "stampini" dalla rubrica globale (lista completa per la selezione)
+    // È collegata direttamente al flusso del repository, quindi si aggiorna se aggiungi amici altrove
     val amiciDisponibili: StateFlow<List<Amico>> = amicoRepository.amici
 
     // Set degli ID degli amici selezionati nella UI
@@ -29,6 +30,11 @@ class ModificaGruppoViewModel(
 
     private var currentGruppoId: String = ""
 
+    // FIX DISSOCIAZIONE: Salviamo la lista degli utenti reali (account Google) che hanno accesso al gruppo.
+    // Se non la salviamo e la rimandiamo indietro al salvataggio, Firestore la sovrascriverebbe con una lista vuota,
+    // buttando fuori tutti dal gruppo!
+    private var currentUtentiIds: List<String> = emptyList()
+
     fun loadGruppo(gruppoId: String) {
         this.currentGruppoId = gruppoId
         viewModelScope.launch {
@@ -36,6 +42,9 @@ class ModificaGruppoViewModel(
                 val gruppo = gruppoRepository.getGruppoPerId(gruppoId)
                 if (gruppo != null) {
                     _nomeGruppo.value = gruppo.nome
+
+                    // Salviamo gli utenti attuali (admin/partecipanti reali)
+                    currentUtentiIds = gruppo.utentiIds
 
                     // Carichiamo i membri che sono GIA' nel gruppo per pre-spuntare le checkbox.
                     // Usiamo .first() per prendere un'istantanea dei membri attuali.
@@ -46,6 +55,7 @@ class ModificaGruppoViewModel(
                 // Nuovo gruppo: tutto vuoto
                 _nomeGruppo.value = ""
                 _amiciSelezionatiIds.value = emptySet()
+                currentUtentiIds = emptyList()
             }
         }
     }
@@ -62,15 +72,16 @@ class ModificaGruppoViewModel(
 
     fun salvaGruppo(onSalvato: () -> Unit) {
         viewModelScope.launch {
-            // Generiamo l'ID qui se è nuovo, così possiamo usarlo sia per il gruppo che per i membri
+            // Generiamo l'ID qui se è nuovo
             val idFinale = if (currentGruppoId.isEmpty()) UUID.randomUUID().toString() else currentGruppoId
 
             // 1. Salviamo il documento del Gruppo (Intestazione)
-            // Salviamo anche la lista degli ID per comodità di visualizzazione nella Home
             val gruppo = Gruppo(
                 id = idFinale,
                 nome = _nomeGruppo.value,
-                membriIds = _amiciSelezionatiIds.value.toList()
+                membriIds = _amiciSelezionatiIds.value.toList(), // Lista ID per riferimento veloce
+                // IMPORTANTE: Rimettiamo la lista utenti originale!
+                utentiIds = currentUtentiIds
             )
             gruppoRepository.aggiungiGruppo(gruppo)
 
@@ -87,7 +98,8 @@ class ModificaGruppoViewModel(
                     }
                 }
             } else {
-                // CASO B: GRUPPO ESISTENTE -> Dobbiamo fare un "diff" (differenza)
+                // CASO B: GRUPPO ESISTENTE -> Dobbiamo fare un "diff" (differenza) per non resettare i km di chi c'è già
+
                 // Recuperiamo gli ID di chi è GIA' salvato nel DB del gruppo
                 val membriNelDbIds = gruppoRepository.getMembriDelGruppo(idFinale).first().map { it.id }.toSet()
 
@@ -107,7 +119,7 @@ class ModificaGruppoViewModel(
                 }
 
                 // 3. Chi c'è in entrambi? -> NON FACCIAMO NULLA!
-                // Questo è il trucco: non toccando i membri esistenti, preserviamo i loro km accumulati.
+                // Questo preserva i loro km accumulati.
             }
 
             onSalvato()
