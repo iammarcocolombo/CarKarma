@@ -58,7 +58,7 @@ fun CarKarmaNavHost(
     onLoginSuccess: (UserData) -> Unit
 ) {
     val context = LocalContext.current
-    // Determina la destinazione iniziale: se l'utente è loggato vai alla home, altrimenti al login
+    // Determina la destinazione iniziale
     val startDestination = if (googleAuthClient.getSignedInUser() != null) "home" else "login"
 
     NavHost(
@@ -80,9 +80,6 @@ fun CarKarmaNavHost(
                             val signInResult = googleAuthClient.signInWithIntent(intent = result.data ?: return@launch)
                             viewModel.onSignInResult(signInResult)
                         }
-                    } else {
-                        // AGGIUNTO: Feedback se il login fallisce o viene annullato
-                        Toast.makeText(context, "Login annullato o fallito. Riprova.", Toast.LENGTH_SHORT).show()
                     }
                 }
             )
@@ -110,7 +107,7 @@ fun CarKarmaNavHost(
                     scope.launch {
                         val intentSender = googleAuthClient.signIn()
                         if (intentSender != null) launcher.launch(IntentSenderRequest.Builder(intentSender).build())
-                        else Toast.makeText(context, "Errore configurazione Google (SHA-1?)", Toast.LENGTH_SHORT).show()
+                        else Toast.makeText(context, "Errore configurazione Google", Toast.LENGTH_SHORT).show()
                     }
                 }
             )
@@ -199,7 +196,8 @@ fun CarKarmaNavHost(
 
         // --- DETTAGLIO AMICO (NUOVO O MODIFICA) ---
         composable(
-            route = "amico?amicoId={amicoId}&gruppoId={gruppoId}", // Accetta gruppoId opzionale
+            // AGGIORNATO: Accetta sia amicoId che gruppoId opzionale
+            route = "amico?amicoId={amicoId}&gruppoId={gruppoId}",
             arguments = listOf(
                 navArgument("amicoId") { type = NavType.StringType; defaultValue = "" },
                 navArgument("gruppoId") { type = NavType.StringType; defaultValue = "" }

@@ -27,7 +27,6 @@ class GruppoRepository(
     init {
         auth.addAuthStateListener { firebaseAuth ->
             val userId = firebaseAuth.currentUser?.uid
-
             if (userId != null) {
                 db.collection("gruppi")
                     .whereArrayContains("utentiIds", userId)
@@ -49,6 +48,7 @@ class GruppoRepository(
         return _gruppi.value.find { it.id == id }
     }
 
+    // --- FUNZIONE FONDAMENTALE PER LA HOME ---
     suspend fun sincronizzaMembriInRubrica(listaGruppi: List<Gruppo>) {
         if (auth.currentUser == null) return
 
@@ -69,17 +69,11 @@ class GruppoRepository(
     }
 
     // --- GESTIONE MEMBRI ---
-
     fun getMembriDelGruppo(gruppoId: String): Flow<List<Amico>> = callbackFlow {
         val registration = db.collection("gruppi").document(gruppoId).collection("membri")
             .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    close(e)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    trySend(snapshot.toObjects<Amico>())
-                }
+                if (e != null) { close(e); return@addSnapshotListener }
+                if (snapshot != null) { trySend(snapshot.toObjects<Amico>()) }
             }
         awaitClose { registration.remove() }
     }
@@ -115,6 +109,15 @@ class GruppoRepository(
             .delete()
     }
 
+    fun aggiornaAnagraficaMembro(gruppoId: String, amico: Amico) {
+        val docRef = db.collection("gruppi").document(gruppoId).collection("membri").document(amico.id)
+        val updates = mapOf(
+            "nome" to amico.nome,
+            "postiAuto" to amico.postiAuto
+        )
+        docRef.update(updates)
+    }
+
     fun aggiornaStatisticheMembro(gruppoId: String, amicoId: String, deltaUscite: Int, deltaGuide: Int, deltaKm: Int) {
         val docRef = db.collection("gruppi").document(gruppoId).collection("membri").document(amicoId)
         db.runTransaction { transaction ->
@@ -129,17 +132,7 @@ class GruppoRepository(
         }
     }
 
-    fun aggiornaAnagraficaMembro(gruppoId: String, amico: Amico) {
-        val docRef = db.collection("gruppi").document(gruppoId).collection("membri").document(amico.id)
-        val updates = mapOf(
-            "nome" to amico.nome,
-            "postiAuto" to amico.postiAuto
-        )
-        docRef.update(updates)
-    }
-
     // --- GESTIONE GRUPPO ---
-
     fun aggiungiGruppo(gruppo: Gruppo) {
         val userId = auth.currentUser?.uid ?: return
         val idFinale = if (gruppo.id.isEmpty()) UUID.randomUUID().toString() else gruppo.id
@@ -171,7 +164,6 @@ class GruppoRepository(
     fun generaNuovoId(): String = UUID.randomUUID().toString()
 
     // --- CONDIVISIONE ---
-
     fun uniscitiAlGruppo(gruppoId: String, onResult: (Boolean) -> Unit) {
         val userId = auth.currentUser?.uid
         if (userId == null) { onResult(false); return }
@@ -190,21 +182,14 @@ class GruppoRepository(
     suspend fun eliminaDatiUtentePubblico() {
         val uid = auth.currentUser?.uid ?: return
         try {
-            // 1. Elimina profilo pubblico
             db.collection("public_users").document(uid).delete().await()
         } catch (e: Exception) { e.printStackTrace() }
     }
 
-    // NUOVO: Rimuove l'utente da TUTTI i gruppi (Pulizia profonda)
     suspend fun rimuoviUtenteDaTuttiIGruppi() {
         val uid = auth.currentUser?.uid ?: return
         try {
-            // Cerca tutti i gruppi dove sono membro
-            val snapshot = db.collection("gruppi")
-                .whereArrayContains("utentiIds", uid)
-                .get().await()
-
-            // Rimuove il mio ID da ogni gruppo (Batch per efficienza)
+            val snapshot = db.collection("gruppi").whereArrayContains("utentiIds", uid).get().await()
             val batch = db.batch()
             for (doc in snapshot.documents) {
                 batch.update(doc.reference, "utentiIds", FieldValue.arrayRemove(uid))

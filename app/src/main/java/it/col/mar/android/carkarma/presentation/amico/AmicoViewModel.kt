@@ -5,13 +5,14 @@ import androidx.lifecycle.viewModelScope
 import it.col.mar.android.carkarma.data.database.AmicoRepository
 import it.col.mar.android.carkarma.data.database.GruppoRepository
 import it.col.mar.android.carkarma.data.model.Amico
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class AmicoViewModel(
     private val amicoRepository: AmicoRepository,
-    private val gruppoRepository: GruppoRepository // Aggiunto per modifiche nel gruppo
+    private val gruppoRepository: GruppoRepository // Necessario per modifiche nel contesto del gruppo
 ) : ViewModel() {
 
     private val _nome = MutableStateFlow("")
@@ -23,17 +24,17 @@ class AmicoViewModel(
     private var currentAmicoId: String = ""
     private var currentGruppoId: String = "" // Se valorizzato, siamo dentro un gruppo
 
+    // FIX: Ora accetta 2 parametri per supportare la modifica nel gruppo
     fun loadAmico(id: String, gruppoId: String) {
         this.currentAmicoId = id
         this.currentGruppoId = gruppoId
 
         viewModelScope.launch {
             if (id.isNotEmpty()) {
+                // Logica bimodale: Carichiamo dal Gruppo o dalla Rubrica?
                 val amico = if (gruppoId.isNotEmpty()) {
-                    // Carichiamo dal GRUPPO
                     gruppoRepository.getMembro(gruppoId, id)
                 } else {
-                    // Carichiamo dalla RUBRICA
                     amicoRepository.getAmicoPerId(id)
                 }
 
@@ -56,53 +57,55 @@ class AmicoViewModel(
     fun salvaAmico(onFinito: () -> Unit) {
         val posti = _postiAuto.value.toIntOrNull() ?: 5
 
-        if (currentGruppoId.isNotEmpty()) {
-            // --- MODIFICA NEL GRUPPO ---
-            // Qui non creiamo nuovi amici, modifichiamo solo quelli esistenti
-            if (currentAmicoId.isNotEmpty()) {
-                val amicoAggiornato = Amico(
-                    id = currentAmicoId,
-                    nome = _nome.value,
-                    postiAuto = posti
-                    // Le statistiche non le tocchiamo qui, il repo saprà cosa fare
-                )
-                // Chiamiamo la funzione specifica del repo che aggiorna solo anagrafica
-                gruppoRepository.aggiornaAnagraficaMembro(currentGruppoId, amicoAggiornato)
-            }
-        } else {
-            // --- MODIFICA/CREAZIONE GLOBALE (RUBRICA) ---
-            if (currentAmicoId.isEmpty()) {
-                // Nuovo Amico
-                val nuovoAmico = Amico(
-                    nome = _nome.value,
-                    postiAuto = posti
-                )
-                amicoRepository.aggiungiAmico(nuovoAmico)
-            } else {
-                // Modifica Esistente
-                val vecchioAmico = amicoRepository.getAmicoPerId(currentAmicoId)
-                if (vecchioAmico != null) {
-                    val amicoAggiornato = vecchioAmico.copy(
-                        nome = _nome.value,
-                        postiAuto = posti
-                    )
-                    amicoRepository.aggiungiAmico(amicoAggiornato)
+        viewModelScope.launch {
+            try {
+                if (currentGruppoId.isNotEmpty()) {
+                    // --- MODIFICA NEL GRUPPO (ISTANZA) ---
+                    if (currentAmicoId.isNotEmpty()) {
+                        val amicoAggiornato = Amico(
+                            id = currentAmicoId,
+                            nome = _nome.value,
+                            postiAuto = posti
+                        )
+                        gruppoRepository.aggiornaAnagraficaMembro(currentGruppoId, amicoAggiornato)
+                    }
+                } else {
+                    // --- MODIFICA/CREAZIONE GLOBALE (RUBRICA) ---
+                    val amicoDaSalvare = if (currentAmicoId.isEmpty()) {
+                        Amico(nome = _nome.value, postiAuto = posti)
+                    } else {
+                        amicoRepository.getAmicoPerId(currentAmicoId)?.copy(
+                            nome = _nome.value,
+                            postiAuto = posti
+                        ) ?: Amico(id = currentAmicoId, nome = _nome.value, postiAuto = posti)
+                    }
+
+                    amicoRepository.aggiungiAmico(amicoDaSalvare)
                 }
+
+                delay(200) // Piccolo ritardo per sync
+                onFinito()
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
-        onFinito()
     }
 
     fun eliminaAmico(onEliminato: () -> Unit) {
-        if (currentAmicoId.isNotEmpty()) {
-            if (currentGruppoId.isNotEmpty()) {
-                // Elimina dal gruppo (rimuove solo l'istanza)
-                gruppoRepository.rimuoviMembroDalGruppo(currentGruppoId, currentAmicoId)
-            } else {
-                // Elimina dalla rubrica globale
-                amicoRepository.rimuoviAmico(currentAmicoId)
+        viewModelScope.launch {
+            try {
+                if (currentAmicoId.isNotEmpty()) {
+                    if (currentGruppoId.isNotEmpty()) {
+                        gruppoRepository.rimuoviMembroDalGruppo(currentGruppoId, currentAmicoId)
+                    } else {
+                        amicoRepository.rimuoviAmico(currentAmicoId)
+                    }
+                }
+                delay(200)
+                onEliminato()
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
-        onEliminato()
     }
 }

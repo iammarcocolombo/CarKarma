@@ -7,6 +7,7 @@ import it.col.mar.android.carkarma.data.model.Amico
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 class AmicoRepository(
@@ -39,56 +40,45 @@ class AmicoRepository(
         return _amici.value.find { it.id == id }
     }
 
-    fun aggiungiAmico(amico: Amico) {
+    // MODIFICA: Ora è 'suspend' e aspetta (.await())
+    suspend fun aggiungiAmico(amico: Amico) {
         val userId = auth.currentUser?.uid ?: return
 
         val idFinale = if (amico.id.isEmpty()) UUID.randomUUID().toString() else amico.id
         val amicoDaSalvare = amico.copy(id = idFinale)
 
-        db.collection("users").document(userId).collection("amici")
-            .document(idFinale)
-            .set(amicoDaSalvare)
+        try {
+            db.collection("users").document(userId).collection("amici")
+                .document(idFinale)
+                .set(amicoDaSalvare)
+                .await() // Aspetta che Firebase confermi!
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
-    // --- NUOVA FUNZIONE: IMPORTA GLI AMICI NELLA RUBRICA PERSONALE ---
     fun importaAmici(listaAmici: List<Amico>) {
         val userId = auth.currentUser?.uid ?: return
         val collectionRef = db.collection("users").document(userId).collection("amici")
-
-        // Usiamo un Batch per scrivere tutto in una volta (più efficiente)
         val batch = db.batch()
 
         listaAmici.forEach { amico ->
-            // Importante: Creiamo uno "stampino" pulito!
-            // Azzeriamo le statistiche perché i km fatti nel gruppo dell'amico
-            // non devono contare nella mia rubrica generale.
-            val template = amico.copy(
-                uscite = 0,
-                guide = 0,
-                km = 0
-            )
-
-            // Usiamo 'set' con lo stesso ID.
-            // Se l'amico esiste già nella mia rubrica (stesso ID), lo aggiorna (es. se ha cambiato nome).
-            // Se non esiste, lo crea.
+            val template = amico.copy(uscite = 0, guide = 0, km = 0)
             val docRef = collectionRef.document(template.id)
             batch.set(docRef, template)
         }
-
-        batch.commit().addOnSuccessListener {
-            println("Amici importati con successo nella rubrica personale!")
-        }
+        batch.commit()
     }
 
-    fun rimuoviAmico(amicoId: String) {
+    suspend fun rimuoviAmico(amicoId: String) {
         val userId = auth.currentUser?.uid ?: return
-        db.collection("users").document(userId).collection("amici")
-            .document(amicoId)
-            .delete()
-    }
-
-    // Deprecata ma mantenuta per compatibilità se servisse
-    fun aggiornaStatisticheAmico(amicoId: String, kmAggiunti: Int, haGuidato: Boolean) {
-        // Non fa nulla, ora usiamo i dati nel Gruppo
+        try {
+            db.collection("users").document(userId).collection("amici")
+                .document(amicoId)
+                .delete()
+                .await() // Aspetta la cancellazione
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

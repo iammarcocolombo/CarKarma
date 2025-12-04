@@ -15,10 +15,10 @@ fun AmicoScreen(
     navController: NavController,
     amicoId: String,
     viewModel: AmicoViewModel,
-    // AGGIUNTO: Parametro opzionale per sapere se siamo dentro un gruppo
+    // FIX: Parametro aggiunto per supportare la chiamata dal NavHost
     gruppoId: String = ""
 ) {
-    // Carichiamo i dati (Globale o Gruppo)
+    // Passiamo entrambi i parametri al ViewModel
     LaunchedEffect(amicoId) {
         viewModel.loadAmico(amicoId, gruppoId)
     }

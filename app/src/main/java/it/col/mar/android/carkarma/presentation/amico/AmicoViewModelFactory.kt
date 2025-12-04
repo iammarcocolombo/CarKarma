@@ -7,7 +7,7 @@ import it.col.mar.android.carkarma.data.database.GruppoRepository
 
 class AmicoViewModelFactory(
     private val amicoRepository: AmicoRepository,
-    private val gruppoRepository: GruppoRepository
+    private val gruppoRepository: GruppoRepository // <--- AGGIUNTO QUESTO
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {

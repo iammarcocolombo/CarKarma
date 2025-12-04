@@ -2,28 +2,23 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---------------------------------------------------------
-    // 1. UTENTI PUBBLICI (Rubrica per inviti)
-    // ---------------------------------------------------------
-    // Chiunque sia autenticato può LEGGERE per trovare amici tramite email.
-    // Ma solo il proprietario dell'account può SCRIVERE/MODIFICARE i propri dati.
+    // 1. UTENTI PUBBLICI (Per gli inviti)
     match /public_users/{userId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // ---------------------------------------------------------
-    // 2. COLLEZIONE GRUPPI E SOTTOCOLLEZIONI (Membri, Uscite)
-    // ---------------------------------------------------------
-    // Attualmente, per la fase Beta tra amici, permettiamo l'accesso
-    // a chiunque sia loggato nell'app.
-    // In una versione futura (Produzione), qui andrà aggiunto il controllo:
-    // allow read, write: if request.auth != null && request.auth.uid in resource.data.utentiIds;
+    // 2. RUBRICA PERSONALE (QUESTA MANCAVA!)
+    // Ogni utente può leggere e scrivere SOLO nella propria cartella
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 3. GRUPPI
+    // Per ora permettiamo l'accesso ai loggati (in futuro si restringe ai membri)
     match /gruppi/{gruppoId} {
       allow read, write: if request.auth != null;
 
-      // Regole per le sottocollezioni (ereditano l'accesso se non specificato diversamente,
-      // ma esplicitiamolo per chiarezza).
       match /membri/{membroId} {
         allow read, write: if request.auth != null;
       }
@@ -32,10 +27,7 @@ service cloud.firestore {
       }
     }
 
-    // ---------------------------------------------------------
-    // 3. ALTRE COLLEZIONI (Default Deny)
-    // ---------------------------------------------------------
-    // Blocca tutto il resto per sicurezza
+    // Blocca tutto il resto
     match /{document=**} {
       allow read, write: if false;
     }
