@@ -12,7 +12,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.GroupAdd
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +24,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import it.col.mar.android.carkarma.data.database.AppContainer
 import it.col.mar.android.carkarma.data.model.Gruppo
+import it.col.mar.android.carkarma.util.AvatarProvider
 
 @Composable
 fun HomeScreen(
@@ -53,7 +53,7 @@ fun HomeScreen(
                 codiceGruppoInput = ""
             }
             is JoinState.Error -> {
-                // L'errore viene mostrato nel dialog, non facciamo nulla qui
+                // L'errore viene mostrato nel dialog
             }
             else -> {}
         }
@@ -226,10 +226,12 @@ fun GruppoCard(
                 modifier = Modifier.size(48.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
+                    // USO DELL'AVATAR PROVIDER
                     Icon(
-                        imageVector = Icons.Default.Person,
+                        imageVector = AvatarProvider.getAvatar(gruppo.avatarIndex),
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(8.dp)
                     )
                 }
             }

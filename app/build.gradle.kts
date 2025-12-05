@@ -80,10 +80,14 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-storage")
 
     // Google Login
     implementation("com.google.android.gms:play-services-auth:21.0.0")
 
     // QR Code
     implementation("com.google.zxing:core:3.5.1")
+
+    // Coil (Per caricare immagini da internet in Compose)
+    implementation("io.coil-kt:coil-compose:2.6.0")
 }

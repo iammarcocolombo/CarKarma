@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import it.col.mar.android.carkarma.util.AvatarProvider
 import it.col.mar.android.carkarma.util.QrCodeGenerator
 
 @Composable
@@ -86,7 +88,30 @@ fun GruppoScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            // --- HEADER GRUPPO ---
+            // --- AVATAR GRUPPO (NUOVO!) ---
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(100.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = AvatarProvider.getAvatar(gruppo!!.avatarIndex),
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- HEADER GRUPPO (Titolo e Azioni) ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -137,7 +162,7 @@ fun GruppoScreen(
             )
 
             if (uscite.isEmpty()) {
-                // --- EMPTY STATE ---
+                // --- EMPTY STATE USCITE ---
                 Box(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentAlignment = Alignment.Center
@@ -150,8 +175,16 @@ fun GruppoScreen(
                             tint = MaterialTheme.colorScheme.surfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("Nessun viaggio registrato.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Aggiungi la prima uscita!", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            text = "Nessun viaggio registrato.",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Aggiungi la prima uscita!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             } else {
@@ -202,7 +235,6 @@ fun GruppoScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // CODICE TESTUALE
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         onClick = {
@@ -228,18 +260,14 @@ fun GruppoScreen(
             },
             confirmButton = {
                 Button(onClick = {
-                    // Usiamo il formato link HTTPS che è:
-                    // 1. Cliccabile su WhatsApp (diventa blu)
-                    // 2. Compatibile col tuo parser in HomeViewModel (cerca l'ultimo slash)
-                    // 3. Gestito dal Deep Link del NavHost se Android lo riconosce
-                    val link = "https://carkarma.app/join/${gruppo!!.id}"
+                    // Inviamo solo il messaggio testuale con il codice
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, "Unisciti al mio gruppo su CarKarma! Clicca qui: $link")
+                        putExtra(Intent.EXTRA_TEXT, "Unisciti al mio gruppo su CarKarma! Usa questo codice:\n\n${gruppo!!.id}")
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "Invia invito..."))
                 }) {
-                    Text("Invia Link")
+                    Text("Invia Codice")
                 }
             },
             dismissButton = {
@@ -289,7 +317,6 @@ fun UscitaCard(uscita: it.col.mar.android.carkarma.data.model.Uscita, onClick: (
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icona Mappa
             Icon(
                 imageVector = Icons.Default.Map,
                 contentDescription = null,
@@ -317,7 +344,6 @@ fun UscitaCard(uscita: it.col.mar.android.carkarma.data.model.Uscita, onClick: (
                 )
             }
 
-            // Badge KM
             Surface(
                 color = MaterialTheme.colorScheme.background,
                 shape = MaterialTheme.shapes.small

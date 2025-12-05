@@ -1,9 +1,11 @@
 package it.col.mar.android.carkarma.data.database
 
+import android.net.Uri
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.toObjects
+import com.google.firebase.storage.FirebaseStorage
 import it.col.mar.android.carkarma.data.model.Amico
 import it.col.mar.android.carkarma.data.model.Gruppo
 import kotlinx.coroutines.channels.awaitClose
@@ -18,6 +20,7 @@ import java.util.UUID
 class GruppoRepository(
     private val db: FirebaseFirestore,
     private val auth: FirebaseAuth,
+    private val storage: FirebaseStorage, // <--- Parametro aggiunto per le immagini
     private val amicoRepository: AmicoRepository,
     private val uscitaRepository: UscitaRepository
 ) {
@@ -25,8 +28,10 @@ class GruppoRepository(
     val gruppi: StateFlow<List<Gruppo>> = _gruppi.asStateFlow()
 
     init {
+        // ASCOLTO FILTRATO PER "UTENTI CON ACCESSO"
         auth.addAuthStateListener { firebaseAuth ->
             val userId = firebaseAuth.currentUser?.uid
+
             if (userId != null) {
                 db.collection("gruppi")
                     .whereArrayContains("utentiIds", userId)
@@ -42,13 +47,39 @@ class GruppoRepository(
         }
     }
 
+    // --- GESTIONE IMMAGINI (STORAGE) ---
+
+    /**
+     * Carica un'immagine su Firebase Storage e restituisce l'URL pubblico.
+     * Salva in: immagini_gruppi/{gruppoId}.jpg
+     */
+    suspend fun uploadImmagineGruppo(gruppoId: String, uriImmagine: Uri): String? {
+        return try {
+            // Riferimento al file nel cloud
+            val storageRef = storage.reference.child("immagini_gruppi/$gruppoId.jpg")
+
+            // Carichiamo il file
+            storageRef.putFile(uriImmagine).await()
+
+            // Recuperiamo l'URL per il download
+            val downloadUrl = storageRef.downloadUrl.await()
+            downloadUrl.toString()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    // --- LEZIONI E QUERY ---
+
     fun getTuttiIGruppi(): List<Gruppo> = _gruppi.value
 
     fun getGruppoPerId(id: String): Gruppo? {
         return _gruppi.value.find { it.id == id }
     }
 
-    // --- FUNZIONE FONDAMENTALE PER LA HOME ---
+    // --- SINCRONIZZAZIONE RUBRICA ---
+
     suspend fun sincronizzaMembriInRubrica(listaGruppi: List<Gruppo>) {
         if (auth.currentUser == null) return
 
@@ -68,12 +99,18 @@ class GruppoRepository(
         }
     }
 
-    // --- GESTIONE MEMBRI ---
+    // --- GESTIONE MEMBRI (SOTTOCOLLEZIONE) ---
+
     fun getMembriDelGruppo(gruppoId: String): Flow<List<Amico>> = callbackFlow {
         val registration = db.collection("gruppi").document(gruppoId).collection("membri")
             .addSnapshotListener { snapshot, e ->
-                if (e != null) { close(e); return@addSnapshotListener }
-                if (snapshot != null) { trySend(snapshot.toObjects<Amico>()) }
+                if (e != null) {
+                    close(e)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    trySend(snapshot.toObjects<Amico>())
+                }
             }
         awaitClose { registration.remove() }
     }
@@ -88,6 +125,7 @@ class GruppoRepository(
         }
     }
 
+    // Recupera un singolo membro
     suspend fun getMembro(gruppoId: String, amicoId: String): Amico? {
         return try {
             val doc = db.collection("gruppi").document(gruppoId)
@@ -97,7 +135,11 @@ class GruppoRepository(
     }
 
     fun aggiungiMembroAlGruppo(gruppoId: String, amicoTemplate: Amico) {
-        val nuovoMembro = amicoTemplate.copy(uscite = 0, guide = 0, km = 0)
+        val nuovoMembro = amicoTemplate.copy(
+            uscite = 0,
+            guide = 0,
+            km = 0
+        )
         db.collection("gruppi").document(gruppoId)
             .collection("membri").document(nuovoMembro.id)
             .set(nuovoMembro)
@@ -107,15 +149,6 @@ class GruppoRepository(
         db.collection("gruppi").document(gruppoId)
             .collection("membri").document(amicoId)
             .delete()
-    }
-
-    fun aggiornaAnagraficaMembro(gruppoId: String, amico: Amico) {
-        val docRef = db.collection("gruppi").document(gruppoId).collection("membri").document(amico.id)
-        val updates = mapOf(
-            "nome" to amico.nome,
-            "postiAuto" to amico.postiAuto
-        )
-        docRef.update(updates)
     }
 
     fun aggiornaStatisticheMembro(gruppoId: String, amicoId: String, deltaUscite: Int, deltaGuide: Int, deltaKm: Int) {
@@ -132,29 +165,56 @@ class GruppoRepository(
         }
     }
 
+    fun aggiornaAnagraficaMembro(gruppoId: String, amico: Amico) {
+        val docRef = db.collection("gruppi").document(gruppoId).collection("membri").document(amico.id)
+        val updates = mapOf(
+            "nome" to amico.nome,
+            "postiAuto" to amico.postiAuto
+        )
+        docRef.update(updates)
+    }
+
     // --- GESTIONE GRUPPO ---
+
     fun aggiungiGruppo(gruppo: Gruppo) {
         val userId = auth.currentUser?.uid ?: return
         val idFinale = if (gruppo.id.isEmpty()) UUID.randomUUID().toString() else gruppo.id
-        val utentiAggiornati = if (gruppo.utentiIds.contains(userId)) gruppo.utentiIds else gruppo.utentiIds + userId
+
+        val utentiAggiornati = if (gruppo.utentiIds.contains(userId)) {
+            gruppo.utentiIds
+        } else {
+            gruppo.utentiIds + userId
+        }
+
         val gruppoDaSalvare = gruppo.copy(id = idFinale, utentiIds = utentiAggiornati)
         db.collection("gruppi").document(idFinale).set(gruppoDaSalvare)
     }
 
-    fun aggiornaGruppo(gruppo: Gruppo) { aggiungiGruppo(gruppo) }
+    fun aggiornaGruppo(gruppo: Gruppo) {
+        aggiungiGruppo(gruppo)
+    }
 
     fun eliminaGruppo(gruppoId: String) {
+        // 1. Elimina tutte le uscite associate
         uscitaRepository.eliminaTutteUsciteDelGruppo(gruppoId)
+
+        // 2. Elimina tutti i membri dalla sottocollezione
         db.collection("gruppi").document(gruppoId).collection("membri").get()
             .addOnSuccessListener { snapshot ->
-                for (doc in snapshot.documents) { doc.reference.delete() }
+                for (doc in snapshot.documents) {
+                    doc.reference.delete()
+                }
+                // 3. Infine, elimina il gruppo
                 db.collection("gruppi").document(gruppoId).delete()
             }
     }
 
     fun lasciaGruppo(gruppoId: String, onResult: (Boolean) -> Unit) {
         val userId = auth.currentUser?.uid
-        if (userId == null) { onResult(false); return }
+        if (userId == null) {
+            onResult(false)
+            return
+        }
         db.collection("gruppi").document(gruppoId)
             .update("utentiIds", FieldValue.arrayRemove(userId))
             .addOnSuccessListener { onResult(true) }
@@ -163,10 +223,15 @@ class GruppoRepository(
 
     fun generaNuovoId(): String = UUID.randomUUID().toString()
 
-    // --- CONDIVISIONE ---
+    // --- CONDIVISIONE E UTENTI ---
+
     fun uniscitiAlGruppo(gruppoId: String, onResult: (Boolean) -> Unit) {
         val userId = auth.currentUser?.uid
-        if (userId == null) { onResult(false); return }
+        if (userId == null) {
+            onResult(false)
+            return
+        }
+
         db.collection("gruppi").document(gruppoId)
             .update("utentiIds", FieldValue.arrayUnion(userId))
             .addOnSuccessListener { onResult(true) }

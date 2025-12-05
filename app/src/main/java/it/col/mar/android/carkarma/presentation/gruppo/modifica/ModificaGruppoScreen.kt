@@ -1,42 +1,26 @@
 package it.col.mar.android.carkarma.presentation.gruppo.modifica
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import it.col.mar.android.carkarma.util.AvatarProvider
 
 @Composable
 fun ModificaGruppoScreen(
@@ -49,6 +33,7 @@ fun ModificaGruppoScreen(
     }
 
     val nomeGruppo by viewModel.nomeGruppo.collectAsState()
+    val avatarIndex by viewModel.selectedAvatarIndex.collectAsState() // L'avatar scelto
     val amiciDisponibili by viewModel.amiciDisponibili.collectAsState()
     val amiciSelezionati by viewModel.amiciSelezionati.collectAsState()
 
@@ -60,7 +45,7 @@ fun ModificaGruppoScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Intestazione con Titolo e tasto Elimina (se in modifica)
+        // Intestazione
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -82,6 +67,9 @@ fun ModificaGruppoScreen(
             }
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Campo Nome
         OutlinedTextField(
             value = nomeGruppo,
             onValueChange = { viewModel.onNomeGruppoChange(it) },
@@ -89,8 +77,48 @@ fun ModificaGruppoScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // --- SELETTORE AVATAR ---
+        Text("Scegli un'icona:", style = MaterialTheme.typography.labelLarge)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            itemsIndexed(AvatarProvider.avatars) { index, icon ->
+                val isSelected = index == avatarIndex
+
+                // Contenitore Icona
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        .border(
+                            width = if (isSelected) 2.dp else 0.dp,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
+                            shape = CircleShape
+                        )
+                        .clickable { viewModel.onAvatarSelected(index) }
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
+        // --- LISTA AMICI ---
         Text(
             text = "Seleziona Amici",
             style = MaterialTheme.typography.titleMedium,
@@ -115,17 +143,11 @@ fun ModificaGruppoScreen(
                     Text(
                         text = amico.nome,
                         style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .weight(1f)
+                        modifier = Modifier.padding(start = 8.dp).weight(1f)
                     )
 
-                    // Tasto per modificare al volo l'amico
-                    // Dentro ModificaGruppoScreen.kt
                     IconButton(onClick = {
-                        // CORREZIONE: Passiamo anche il gruppoId corrente!
-                        // Nota: Se stiamo creando un gruppo nuovo (gruppoId vuoto), modifichiamo la versione globale (corretto).
-                        // Se il gruppo esiste, passiamo il suo ID così modifichiamo l'istanza nel gruppo.
+                        // Naviga a modifica amico passando il gruppoId corrente
                         navController.navigate("amico?amicoId=${amico.id}&gruppoId=$gruppoId")
                     }) {
                         Icon(Icons.Default.Edit, contentDescription = "Modifica Amico")
@@ -136,38 +158,28 @@ fun ModificaGruppoScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Bottone per creare un nuovo amico
+        // Tasto Nuovo Amico
         Button(
-            // LINK CORRETTO: Nuovo amico (parametro opzionale omesso)
             onClick = { navController.navigate("amico") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.secondary
-            )
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
         ) {
             Icon(Icons.Default.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Crea Nuovo Amico",
-                color = MaterialTheme.colorScheme.onSecondary
-            )
+            Text("Crea Nuovo Amico (Rubrica)", color = MaterialTheme.colorScheme.onSecondary)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Bottone Salva Gruppo
+        // Tasto Salva
         Button(
             onClick = {
                 viewModel.salvaGruppo {
                     navController.popBackStack()
                 }
             },
-            enabled = nomeGruppo.isNotBlank(), // Evita di salvare gruppi senza nome
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
+            enabled = nomeGruppo.isNotBlank(),
+            modifier = Modifier.fillMaxWidth().height(50.dp)
         ) {
             Text("Salva Gruppo")
         }
@@ -182,23 +194,14 @@ fun ModificaGruppoScreen(
                 TextButton(
                     onClick = {
                         viewModel.eliminaGruppo {
-                            // Torna alla home e pulisci lo stack per evitare problemi col tasto indietro
-                            navController.navigate("home") {
-                                popUpTo("home") { inclusive = true }
-                            }
+                            navController.navigate("home") { popUpTo("home") { inclusive = true } }
                         }
                         showDeleteDialog = false
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Elimina")
-                }
+                ) { Text("Elimina") }
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Annulla")
-                }
-            }
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Annulla") } }
         )
     }
 }
