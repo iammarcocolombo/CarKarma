@@ -39,7 +39,6 @@ fun GruppoScreen(
     gruppoId: String,
     viewModel: GruppoViewModel
 ) {
-    // Carichiamo i dati del gruppo appena entriamo
     LaunchedEffect(gruppoId) {
         viewModel.loadGruppo(gruppoId)
     }
@@ -51,9 +50,7 @@ fun GruppoScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
-    // Stato per il Dialog di Condivisione
     var showShareDialog by remember { mutableStateOf(false) }
-    // Stato per il Dialog di conferma uscita
     var showLeaveDialog by remember { mutableStateOf(false) }
 
     if (errorMessage != null) {
@@ -86,9 +83,13 @@ fun GruppoScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                // MODIFICA: Rimosso top = 8.dp. Ora è 0 (implicito).
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
         ) {
-            // --- AVATAR GRUPPO (NUOVO!) ---
+            // --- AVATAR GRUPPO ---
+            // Aggiungo un piccolo Spacer qui SOLO se necessario, altrimenti sta in alto
+            //Spacer(modifier = Modifier.height(8.dp))
+
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
@@ -96,22 +97,22 @@ fun GruppoScreen(
                 Surface(
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(100.dp)
+                    modifier = Modifier.size(80.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = AvatarProvider.getAvatar(gruppo!!.avatarIndex),
                             contentDescription = null,
-                            modifier = Modifier.size(64.dp),
+                            modifier = Modifier.size(48.dp),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // --- HEADER GRUPPO (Titolo e Azioni) ---
+            // --- HEADER GRUPPO ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -131,7 +132,6 @@ fun GruppoScreen(
                     )
                 }
 
-                // AZIONI
                 Row {
                     IconButton(onClick = { showShareDialog = true }) {
                         Icon(Icons.Default.Share, "Invita", tint = MaterialTheme.colorScheme.primary)
@@ -162,7 +162,6 @@ fun GruppoScreen(
             )
 
             if (uscite.isEmpty()) {
-                // --- EMPTY STATE USCITE ---
                 Box(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentAlignment = Alignment.Center
@@ -175,20 +174,11 @@ fun GruppoScreen(
                             tint = MaterialTheme.colorScheme.surfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Nessun viaggio registrato.",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Aggiungi la prima uscita!",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text("Nessun viaggio registrato.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Aggiungi la prima uscita!", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             } else {
-                // --- LISTA USCITE ---
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(bottom = 80.dp)
@@ -205,32 +195,19 @@ fun GruppoScreen(
         }
     }
 
-    // --- DIALOG CONDIVISIONE ---
+    // --- DIALOG VARI ---
     if (showShareDialog && gruppo != null) {
         AlertDialog(
             onDismissRequest = { showShareDialog = false },
-            title = {
-                Text(
-                    text = "Invita Amici",
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
+            title = { Text("Invita Amici", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
             text = {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Text("Fai scansionare questo QR o invia il codice:", textAlign = TextAlign.Center)
                     Spacer(modifier = Modifier.height(16.dp))
 
                     val qrBitmap = remember(gruppo!!.id) { QrCodeGenerator.generateQrCode(gruppo!!.id) }
                     if (qrBitmap != null) {
-                        Image(
-                            bitmap = qrBitmap.asImageBitmap(),
-                            contentDescription = "QR Code",
-                            modifier = Modifier.size(200.dp).padding(8.dp)
-                        )
+                        Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "QR Code", modifier = Modifier.size(200.dp).padding(8.dp))
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -250,33 +227,22 @@ fun GruppoScreen(
                             modifier = Modifier.padding(16.dp)
                         )
                     }
-                    Text(
-                        text = "Tocca il codice per copiarlo",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+                    Text("Tocca il codice per copiarlo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 4.dp))
                 }
             },
             confirmButton = {
                 Button(onClick = {
-                    // Inviamo solo il messaggio testuale con il codice
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
                         putExtra(Intent.EXTRA_TEXT, "Unisciti al mio gruppo su CarKarma! Usa questo codice:\n\n${gruppo!!.id}")
                     }
-                    context.startActivity(Intent.createChooser(shareIntent, "Invia invito..."))
-                }) {
-                    Text("Invia Codice")
-                }
+                    context.startActivity(Intent.createChooser(shareIntent, "Invia codice..."))
+                }) { Text("Invia Codice") }
             },
-            dismissButton = {
-                TextButton(onClick = { showShareDialog = false }) { Text("Chiudi") }
-            }
+            dismissButton = { TextButton(onClick = { showShareDialog = false }) { Text("Chiudi") } }
         )
     }
 
-    // --- DIALOG CONFERMA USCITA ---
     if (showLeaveDialog) {
         AlertDialog(
             onDismissRequest = { showLeaveDialog = false },
@@ -284,76 +250,28 @@ fun GruppoScreen(
             text = { Text("Se esci, non vedrai più questo gruppo nella tua Home, ma i dati non verranno cancellati per gli altri partecipanti.") },
             confirmButton = {
                 Button(
-                    onClick = {
-                        viewModel.lasciaGruppo {
-                            navController.popBackStack()
-                        }
-                        showLeaveDialog = false
-                    },
+                    onClick = { viewModel.lasciaGruppo { navController.popBackStack() }; showLeaveDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Lascia Gruppo")
-                }
+                ) { Text("Lascia Gruppo") }
             },
-            dismissButton = {
-                TextButton(onClick = { showLeaveDialog = false }) { Text("Annulla") }
-            }
+            dismissButton = { TextButton(onClick = { showLeaveDialog = false }) { Text("Annulla") } }
         )
     }
 }
 
 @Composable
 fun UscitaCard(uscita: it.col.mar.android.carkarma.data.model.Uscita, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(0.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Map,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-
+    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), elevation = CardDefaults.cardElevation(0.dp)) {
+        Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Map, null, tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.width(16.dp))
-
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = uscita.nome,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
-                )
-
-                val sottotitolo = if (uscita.destinazione.isNotBlank())
-                    "Verso: ${uscita.destinazione}"
-                else
-                    "${uscita.partecipantiIds.size} partecipanti"
-
-                Text(
-                    text = sottotitolo,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(text = uscita.nome, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                val sottotitolo = if (uscita.destinazione.isNotBlank()) "Verso: ${uscita.destinazione}" else "${uscita.partecipantiIds.size} partecipanti"
+                Text(text = sottotitolo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-
-            Surface(
-                color = MaterialTheme.colorScheme.background,
-                shape = MaterialTheme.shapes.small
-            ) {
-                Text(
-                    text = "${uscita.kmTotali} km",
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+            Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.small) {
+                Text(text = "${uscita.kmTotali} km", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(8.dp, 4.dp), color = MaterialTheme.colorScheme.onSurface)
             }
         }
     }
