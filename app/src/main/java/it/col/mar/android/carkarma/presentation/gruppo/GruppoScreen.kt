@@ -83,13 +83,11 @@ fun GruppoScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                // MODIFICA: Rimosso top = 8.dp. Ora è 0 (implicito).
                 .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
         ) {
-            // --- AVATAR GRUPPO ---
-            // Aggiungo un piccolo Spacer qui SOLO se necessario, altrimenti sta in alto
-            //Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
+            // --- AVATAR GRUPPO ---
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
@@ -100,11 +98,12 @@ fun GruppoScreen(
                     modifier = Modifier.size(80.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = AvatarProvider.getAvatar(gruppo!!.avatarIndex),
+                        // CORREZIONE: Usiamo DisplayAvatar per gestire il tipo CarKarmaAvatar
+                        AvatarProvider.DisplayAvatar(
+                            avatar = AvatarProvider.getAvatar(gruppo!!.avatarIndex),
                             contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(48.dp)
                         )
                     }
                 }
@@ -195,7 +194,6 @@ fun GruppoScreen(
         }
     }
 
-    // --- DIALOG VARI ---
     if (showShareDialog && gruppo != null) {
         AlertDialog(
             onDismissRequest = { showShareDialog = false },
@@ -207,7 +205,11 @@ fun GruppoScreen(
 
                     val qrBitmap = remember(gruppo!!.id) { QrCodeGenerator.generateQrCode(gruppo!!.id) }
                     if (qrBitmap != null) {
-                        Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "QR Code", modifier = Modifier.size(200.dp).padding(8.dp))
+                        Image(
+                            bitmap = qrBitmap.asImageBitmap(),
+                            contentDescription = "QR Code",
+                            modifier = Modifier.size(200.dp).padding(8.dp)
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -236,10 +238,14 @@ fun GruppoScreen(
                         type = "text/plain"
                         putExtra(Intent.EXTRA_TEXT, "Unisciti al mio gruppo su CarKarma! Usa questo codice:\n\n${gruppo!!.id}")
                     }
-                    context.startActivity(Intent.createChooser(shareIntent, "Invia codice..."))
-                }) { Text("Invia Codice") }
+                    context.startActivity(Intent.createChooser(shareIntent, "Invia invito..."))
+                }) {
+                    Text("Invia Codice")
+                }
             },
-            dismissButton = { TextButton(onClick = { showShareDialog = false }) { Text("Chiudi") } }
+            dismissButton = {
+                TextButton(onClick = { showShareDialog = false }) { Text("Chiudi") }
+            }
         )
     }
 

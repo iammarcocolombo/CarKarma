@@ -33,7 +33,7 @@ fun ModificaGruppoScreen(
     }
 
     val nomeGruppo by viewModel.nomeGruppo.collectAsState()
-    val avatarIndex by viewModel.selectedAvatarIndex.collectAsState() // L'avatar scelto
+    val avatarIndex by viewModel.selectedAvatarIndex.collectAsState()
     val amiciDisponibili by viewModel.amiciDisponibili.collectAsState()
     val amiciSelezionati by viewModel.amiciSelezionati.collectAsState()
 
@@ -87,10 +87,10 @@ fun ModificaGruppoScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            itemsIndexed(AvatarProvider.avatars) { index, icon ->
+            // Usiamo la nuova lista ibrida di AvatarProvider
+            itemsIndexed(AvatarProvider.avatars) { index, avatar ->
                 val isSelected = index == avatarIndex
 
-                // Contenitore Icona
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
@@ -107,10 +107,12 @@ fun ModificaGruppoScreen(
                         )
                         .clickable { viewModel.onAvatarSelected(index) }
                 ) {
-                    Icon(
-                        imageVector = icon,
+                    // Usiamo il componente DisplayAvatar per mostrare sia vettori che risorse
+                    AvatarProvider.DisplayAvatar(
+                        avatar = avatar,
                         contentDescription = null,
-                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(12.dp).size(32.dp)
                     )
                 }
             }
