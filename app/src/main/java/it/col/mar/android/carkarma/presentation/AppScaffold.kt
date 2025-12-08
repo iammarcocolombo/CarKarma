@@ -42,27 +42,23 @@ fun AppScaffold(
     title: String = stringResource(R.string.app_name),
     userData: UserData? = null,
     onSignOut: () -> Unit = {},
-    onDeleteAccount: () -> Unit = {}, // Nuova callback per eliminazione
+    onDeleteAccount: () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
-    // Determiniamo se mostrare le barre di navigazione (nascoste nel login)
     val navBackStackEntry = navController?.currentBackStackEntryAsState()?.value
     val currentRoute = navBackStackEntry?.destination?.route
-    // Nascondiamo barre se siamo nel login o se la rotta non è ancora definita
     val showBars = currentRoute != "login" && currentRoute != null
 
     // TRUCCO PER IL DRAWER A DESTRA (END DRAWER)
-    // Invertiamo il layout del contenitore del drawer per farlo aprire da destra
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         ModalNavigationDrawer(
             drawerState = drawerState,
-            gesturesEnabled = showBars, // Disabilita lo swipe laterale nella schermata di login
+            gesturesEnabled = showBars,
             drawerContent = {
-                // Ripristiniamo la direzione LTR (sinistra -> destra) per il contenuto del menu
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     if (showBars) {
                         ModalDrawerSheet {
@@ -89,9 +85,7 @@ fun AppScaffold(
                                         )
                                     }
                                 }
-
                                 Spacer(modifier = Modifier.height(12.dp))
-
                                 if (userData?.username != null) {
                                     Text(
                                         text = userData.username,
@@ -109,7 +103,6 @@ fun AppScaffold(
                             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
                             // --- MENU ITEMS ---
-
                             NavigationDrawerItem(
                                 label = { Text("Privacy Policy") },
                                 selected = false,
@@ -118,6 +111,20 @@ fun AppScaffold(
                                     scope.launch {
                                         drawerState.close()
                                         navController?.navigate("privacy")
+                                    }
+                                },
+                                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                            )
+
+                            // NUOVA VOCE: CREDITI
+                            NavigationDrawerItem(
+                                label = { Text("Crediti e Licenze") },
+                                selected = false,
+                                icon = { Icon(Icons.Default.Info, null) },
+                                onClick = {
+                                    scope.launch {
+                                        drawerState.close()
+                                        navController?.navigate("credits")
                                     }
                                 },
                                 modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
@@ -139,7 +146,6 @@ fun AppScaffold(
                             Spacer(modifier = Modifier.weight(1f))
                             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-                            // TASTO ELIMINA ACCOUNT (Rosso)
                             NavigationDrawerItem(
                                 label = { Text("Elimina Account", color = MaterialTheme.colorScheme.error) },
                                 selected = false,
@@ -158,7 +164,6 @@ fun AppScaffold(
                 }
             },
             content = {
-                // Ripristiniamo la direzione LTR per il contenuto principale dell'app
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     Scaffold(
                         topBar = {
@@ -196,7 +201,6 @@ fun AppScaffold(
         )
     }
 
-    // Dialog di conferma eliminazione account
     if (showDeleteConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
