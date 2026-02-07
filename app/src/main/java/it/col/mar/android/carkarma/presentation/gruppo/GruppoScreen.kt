@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BarChart // Import per l'icona del grafico
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.List
@@ -58,7 +59,7 @@ fun GruppoScreen(
     var showShareSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
-    // Stato per il Dialog di conferma uscita (questo rimane un Dialog perché è un avviso critico)
+    // Stato per il Dialog di conferma uscita
     var showLeaveDialog by remember { mutableStateOf(false) }
 
     if (errorMessage != null) {
@@ -139,15 +140,22 @@ fun GruppoScreen(
                 }
 
                 Row {
-                    // Tasto Invita -> Apre il BottomSheet
+                    // 1. STATISTICHE (Nuovo Tasto)
+                    IconButton(onClick = { navController.navigate("statistiche/${gruppo!!.id}") }) {
+                        Icon(Icons.Default.BarChart, "Statistiche", tint = MaterialTheme.colorScheme.tertiary)
+                    }
+
+                    // 2. INVITA (Apre il BottomSheet)
                     IconButton(onClick = { showShareSheet = true }) {
                         Icon(Icons.Default.Share, "Invita", tint = MaterialTheme.colorScheme.primary)
                     }
 
+                    // 3. MODIFICA
                     IconButton(onClick = { navController.navigate("modificaGruppo?gruppoId=${gruppo!!.id}") }) {
                         Icon(Icons.Default.Edit, "Modifica", tint = MaterialTheme.colorScheme.primary)
                     }
 
+                    // 4. LASCIA GRUPPO
                     IconButton(onClick = { showLeaveDialog = true }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ExitToApp,
@@ -204,7 +212,7 @@ fun GruppoScreen(
         }
     }
 
-    // --- BOTTOM SHEET CONDIVISIONE (Design Moderno) ---
+    // --- BOTTOM SHEET CONDIVISIONE ---
     if (showShareSheet && gruppo != null) {
         ModalBottomSheet(
             onDismissRequest = { showShareSheet = false },
@@ -215,7 +223,6 @@ fun GruppoScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp)
-                    // Padding extra in basso per la navigation bar
                     .padding(bottom = 48.dp)
             ) {
                 Text(
@@ -304,7 +311,7 @@ fun GruppoScreen(
         }
     }
 
-    // --- DIALOG CONFERMA USCITA (Questo rimane un Dialog perché è un alert) ---
+    // --- DIALOG CONFERMA USCITA ---
     if (showLeaveDialog) {
         AlertDialog(
             onDismissRequest = { showLeaveDialog = false },

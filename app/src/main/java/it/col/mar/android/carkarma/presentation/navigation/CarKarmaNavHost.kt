@@ -45,6 +45,9 @@ import it.col.mar.android.carkarma.presentation.login.LoginViewModel
 import it.col.mar.android.carkarma.presentation.login.LoginViewModelFactory
 import it.col.mar.android.carkarma.presentation.privacy.PrivacyScreen
 import it.col.mar.android.carkarma.presentation.splash.SplashScreen
+import it.col.mar.android.carkarma.presentation.statistiche.StatisticheScreen
+import it.col.mar.android.carkarma.presentation.statistiche.StatisticheViewModel
+import it.col.mar.android.carkarma.presentation.statistiche.StatisticheViewModelFactory
 import it.col.mar.android.carkarma.presentation.uscita.UscitaScreen
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModel
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModelFactory
@@ -73,7 +76,6 @@ fun CarKarmaNavHost(
         // --- SPLASH SCREEN ---
         composable("splash") {
             // Osserviamo lo stato del caricamento dati dal Repository
-            // (Assicurati che GruppoRepository abbia la variabile isDataLoaded come abbiamo fatto prima)
             val isDataLoaded by AppContainer.gruppoRepository.isDataLoaded.collectAsState()
 
             SplashScreen(
@@ -209,6 +211,21 @@ fun CarKarmaNavHost(
             GruppoScreen(navController, it.arguments?.getString("gruppoId") ?: "", vm)
         }
 
+        // --- STATISTICHE GRUPPO (NUOVO) ---
+        composable(
+            route = "statistiche/{gruppoId}",
+            arguments = listOf(navArgument("gruppoId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
+            val vm: StatisticheViewModel = viewModel(
+                factory = StatisticheViewModelFactory(
+                    AppContainer.gruppoRepository,
+                    AppContainer.uscitaRepository
+                )
+            )
+            StatisticheScreen(navController, gruppoId, vm)
+        }
+
         // --- MODIFICA GRUPPO ---
         composable("modificaGruppo?gruppoId={gruppoId}", arguments = listOf(navArgument("gruppoId") { type = NavType.StringType; defaultValue = "" })) {
             val vm: ModificaGruppoViewModel = viewModel(factory = ModificaGruppoViewModelFactory(AppContainer.gruppoRepository, AppContainer.amicoRepository))
@@ -239,6 +256,7 @@ fun CarKarmaNavHost(
                 )
             )
             vm.loadAmico(amicoId, gruppoId)
+
             AmicoScreen(navController, amicoId, vm, gruppoId)
         }
     }

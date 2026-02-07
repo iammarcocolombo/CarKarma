@@ -38,6 +38,20 @@ class UscitaRepository(
     }
 
     /**
+     * NUOVA FUNZIONE: Recupera tutte le uscite in un colpo solo (Snapshot) per calcoli statistici.
+     * Non rimane in ascolto, scarica i dati una volta sola.
+     */
+    suspend fun getUsciteSnapshot(gruppoId: String): List<Uscita> {
+        return try {
+            val snapshot = db.collection("gruppi").document(gruppoId)
+                .collection("uscite").get().await()
+            snapshot.toObjects<Uscita>()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
      * Recupera una singola uscita specifica (serve sapere il gruppoId per trovarla).
      */
     suspend fun getUscita(gruppoId: String, uscitaId: String): Uscita? {
