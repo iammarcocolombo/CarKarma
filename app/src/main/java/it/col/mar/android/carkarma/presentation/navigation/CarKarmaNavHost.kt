@@ -44,6 +44,7 @@ import it.col.mar.android.carkarma.presentation.login.LoginScreen
 import it.col.mar.android.carkarma.presentation.login.LoginViewModel
 import it.col.mar.android.carkarma.presentation.login.LoginViewModelFactory
 import it.col.mar.android.carkarma.presentation.privacy.PrivacyScreen
+import it.col.mar.android.carkarma.presentation.splash.SplashScreen
 import it.col.mar.android.carkarma.presentation.uscita.UscitaScreen
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModel
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModelFactory
@@ -59,14 +60,33 @@ fun CarKarmaNavHost(
     onLoginSuccess: (UserData) -> Unit
 ) {
     val context = LocalContext.current
-    // Determina la destinazione iniziale
-    val startDestination = if (googleAuthClient.getSignedInUser() != null) "home" else "login"
+
+    // Determiniamo la destinazione successiva allo Splash (se è già loggato va alla home)
+    val destinationAfterSplash = if (googleAuthClient.getSignedInUser() != null) "home" else "login"
 
     NavHost(
         navController = navController,
-        startDestination = startDestination,
+        startDestination = "splash", // La partenza è sempre lo splash
         modifier = Modifier.padding(paddingValues)
     ) {
+
+        // --- SPLASH SCREEN ---
+        composable("splash") {
+            // Osserviamo lo stato del caricamento dati dal Repository
+            // (Assicurati che GruppoRepository abbia la variabile isDataLoaded come abbiamo fatto prima)
+            val isDataLoaded by AppContainer.gruppoRepository.isDataLoaded.collectAsState()
+
+            SplashScreen(
+                isDataReady = isDataLoaded,
+                onAnimationFinished = {
+                    // Naviga verso home o login rimuovendo lo splash dallo stack
+                    navController.navigate(destinationAfterSplash) {
+                        popUpTo("splash") { inclusive = true }
+                    }
+                }
+            )
+        }
+
         // --- LOGIN SCREEN ---
         composable("login") {
             val viewModel: LoginViewModel = viewModel(factory = LoginViewModelFactory())
@@ -91,7 +111,6 @@ fun CarKarmaNavHost(
                 if (state.isSignInSuccessful) {
                     googleAuthClient.getSignedInUser()?.let { user ->
                         onLoginSuccess(user)
-                        // Salviamo l'utente nel DB pubblico per permettere gli inviti
                         AppContainer.gruppoRepository.rendiUtenteCercabile(user.userId, user.email, user.username)
                     }
 
@@ -154,8 +173,8 @@ fun CarKarmaNavHost(
                 LaunchedEffect(groupId) {
                     AppContainer.gruppoRepository.uniscitiAlGruppo(groupId) { successo ->
                         if (successo) {
-                            // MAGIA: Importiamo gli amici del gruppo nella rubrica personale!
                             scope.launch {
+                                // Importiamo gli amici del gruppo nella rubrica personale
                                 val membriDelGruppo = AppContainer.gruppoRepository.getMembriSnapshot(groupId)
                                 if (membriDelGruppo.isNotEmpty()) {
                                     AppContainer.amicoRepository.importaAmici(membriDelGruppo)
@@ -204,7 +223,7 @@ fun CarKarmaNavHost(
 
         // --- DETTAGLIO AMICO (NUOVO O MODIFICA) ---
         composable(
-            route = "amico?amicoId={amicoId}&gruppoId={gruppoId}", // Accetta gruppoId opzionale
+            route = "amico?amicoId={amicoId}&gruppoId={gruppoId}",
             arguments = listOf(
                 navArgument("amicoId") { type = NavType.StringType; defaultValue = "" },
                 navArgument("gruppoId") { type = NavType.StringType; defaultValue = "" }
@@ -219,9 +238,7 @@ fun CarKarmaNavHost(
                     AppContainer.gruppoRepository
                 )
             )
-            // Carica l'amico dal contesto giusto (globale o gruppo)
             vm.loadAmico(amicoId, gruppoId)
-
             AmicoScreen(navController, amicoId, vm, gruppoId)
         }
     }

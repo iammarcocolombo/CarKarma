@@ -24,7 +24,7 @@ class UscitaViewModel(
     private val gruppoRepository: GruppoRepository
 ) : ViewModel() {
 
-    // Usa la chiave dal file di configurazione
+    // Torniamo a usare la chiave di OpenRouteService dal file Config
     private val ORS_API_KEY = Config.ORS_API_KEY
 
     private val calcoloUseCase = CalcoloTurnoUseCase()
@@ -32,10 +32,10 @@ class UscitaViewModel(
     private var currentUscitaId: String = ""
     private var currentGruppoId: String = ""
 
-    // Salviamo lo stato originale per poter fare il "revert" delle statistiche in caso di modifica
+    // Salviamo l'uscita originale per poter fare il "revert" delle statistiche in caso di modifica
     private var originalUscita: Uscita? = null
 
-    // Memorizza i km di sola andata calcolati dall'API per ricalcoli veloci
+    // Memorizza i km di sola andata calcolati dall'API per ricalcoli veloci dello switch A/R
     private var lastCalculatedOneWayKm: Int? = null
 
     private val _nomeUscita = MutableStateFlow("")
@@ -155,7 +155,7 @@ class UscitaViewModel(
             return
         }
 
-        if (ORS_API_KEY.contains("YOUR_ORS_API_KEY")) {
+        if (ORS_API_KEY.contains("YOUR_ORS_API_KEY") || ORS_API_KEY.isEmpty()) {
             _errorMessage.value = "Manca la API Key di ORS in Config.kt!"
             return
         }
@@ -164,17 +164,18 @@ class UscitaViewModel(
             _isLoadingMaps.value = true
             try {
                 val kmSolaAndata = withContext(Dispatchers.IO) {
-                    val s = fetchCoordinates(start) ?: return@withContext null
-                    val e = fetchCoordinates(end) ?: return@withContext null
-                    fetchRouteDistance(s, e)
+                    // 1. Troviamo le coordinate di partenza
+                    val sCoords = fetchCoordinates(start) ?: throw Exception("Indirizzo partenza non trovato")
+                    // 2. Troviamo le coordinate di destinazione
+                    val eCoords = fetchCoordinates(end) ?: throw Exception("Indirizzo destinazione non trovato")
+                    // 3. Calcoliamo il percorso
+                    fetchRouteDistance(sCoords, eCoords)
                 }
 
                 if (kmSolaAndata != null) {
                     lastCalculatedOneWayKm = kmSolaAndata
-
                     val multiplier = if (_isAndataRitorno.value) 2 else 1
                     _kmTotali.value = kmSolaAndata * multiplier
-
                     _errorMessage.value = null
                 } else {
                     _errorMessage.value = "Percorso non trovato."
@@ -187,6 +188,7 @@ class UscitaViewModel(
         }
     }
 
+    // Geocoding con ORS
     private fun fetchCoordinates(address: String): Pair<Double, Double>? {
         try {
             val enc = URLEncoder.encode(address, "UTF-8")
@@ -201,6 +203,7 @@ class UscitaViewModel(
         return null
     }
 
+    // Routing con ORS
     private fun fetchRouteDistance(start: Pair<Double, Double>, end: Pair<Double, Double>): Int? {
         try {
             val s = "${start.first},${start.second}"
@@ -210,7 +213,8 @@ class UscitaViewModel(
             val feats = json.getJSONArray("features")
             if (feats.length() > 0) {
                 val dist = feats.getJSONObject(0).getJSONObject("properties").getJSONObject("summary").getDouble("distance")
-                return (dist / 1000).toInt()
+                // Convertiamo metri in km con arrotondamento
+                return ((dist / 1000) + 0.5).toInt()
             }
         } catch (e: Exception) { e.printStackTrace() }
         return null
@@ -218,34 +222,19 @@ class UscitaViewModel(
 
     // --- ALGORITMO SUGGERIMENTO ---
     fun calcolaSuggerimento() {
-        val amiciOggetti = _amiciDelGruppo.value
-        val partecipantiIds = _partecipantiSelezionati.value
-
-        if (partecipantiIds.size < 2) {
+        val amici = _amiciDelGruppo.value
+        val part = _partecipantiSelezionati.value
+        if (part.size < 2) {
             _suggerimentoGuidatore.value = "Seleziona almeno 2 partecipanti."
             return
         }
-
-        val classifica = calcoloUseCase.calcolaChiGuida(amiciOggetti, partecipantiIds)
-
-        if (classifica.isNotEmpty()) {
-            if (classifica.size == 1) {
-                val (prescelto, karma) = classifica.first()
-                _suggerimentoGuidatore.value = "🚗 Dovrebbe guidare:\n${prescelto.nome}\n(Karma Gruppo: ${String.format(Locale.US, "%.1f", karma)})"
-            } else {
-                val sb = StringBuilder("🚗 Servono ${classifica.size} auto!\nEcco la squadra ideale:\n\n")
-                classifica.forEachIndexed { index, (amico, karma) ->
-                    sb.append("${index + 1}. ${amico.nome} (${amico.postiAuto} posti)\n   Karma Gruppo: ${String.format(Locale.US, "%.1f", karma)}\n")
-                }
-
-                val postiTotali = classifica.sumOf { it.first.postiAuto }
-                if (postiTotali < partecipantiIds.size) {
-                    sb.append("\n⚠️ ATTENZIONE: Mancano ancora ${partecipantiIds.size - postiTotali} posti!")
-                }
-                _suggerimentoGuidatore.value = sb.toString()
-            }
+        val res = calcoloUseCase.calcolaChiGuida(amici, part)
+        if (res.isNotEmpty()) {
+            val sb = StringBuilder("🚗 Consigliati:\n")
+            res.forEach { (a, k) -> sb.append("- ${a.nome} (Karma: ${String.format(Locale.US, "%.1f", k)})\n") }
+            _suggerimentoGuidatore.value = sb.toString()
         } else {
-            _suggerimentoGuidatore.value = "Nessuna soluzione trovata! Controlla i posti auto disponibili."
+            _suggerimentoGuidatore.value = "Nessuna soluzione trovata. Controlla i posti auto."
         }
     }
 

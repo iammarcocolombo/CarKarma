@@ -51,7 +51,7 @@ fun AppScaffold(
 
     val navBackStackEntry = navController?.currentBackStackEntryAsState()?.value
     val currentRoute = navBackStackEntry?.destination?.route
-    val showBars = currentRoute != "login" && currentRoute != null
+    val showBars = currentRoute != "login" && currentRoute != null && currentRoute != "splash"
 
     // TRUCCO PER IL DRAWER A DESTRA (END DRAWER)
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {

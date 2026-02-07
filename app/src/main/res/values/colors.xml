@@ -7,4 +7,8 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- COLORE DI SFONDO (Match con Material Theme Dark) -->
+    <!-- Questo codice hex #141218 è il tipico sfondo scuro di Material3 -->
+    <color name="app_background_color">#141218</color>
 </resources>

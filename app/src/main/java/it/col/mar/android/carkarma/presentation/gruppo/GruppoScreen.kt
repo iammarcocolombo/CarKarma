@@ -32,13 +32,16 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import it.col.mar.android.carkarma.util.AvatarProvider
 import it.col.mar.android.carkarma.util.QrCodeGenerator
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GruppoScreen(
     navController: NavController,
     gruppoId: String,
     viewModel: GruppoViewModel
 ) {
+    // Carichiamo i dati del gruppo appena entriamo nella schermata
     LaunchedEffect(gruppoId) {
         viewModel.loadGruppo(gruppoId)
     }
@@ -49,8 +52,13 @@ fun GruppoScreen(
 
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val scope = rememberCoroutineScope() // Necessario per gestire il BottomSheet
 
-    var showShareDialog by remember { mutableStateOf(false) }
+    // Stato per il Bottom Sheet di Condivisione
+    var showShareSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState()
+
+    // Stato per il Dialog di conferma uscita (questo rimane un Dialog perché è un avviso critico)
     var showLeaveDialog by remember { mutableStateOf(false) }
 
     if (errorMessage != null) {
@@ -82,8 +90,8 @@ fun GruppoScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                .padding(top = paddingValues.calculateTopPadding())
+                .padding(horizontal = 16.dp)
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -98,12 +106,11 @@ fun GruppoScreen(
                     modifier = Modifier.size(80.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        // CORREZIONE: Usiamo DisplayAvatar per gestire il tipo CarKarmaAvatar
                         AvatarProvider.DisplayAvatar(
                             avatar = AvatarProvider.getAvatar(gruppo!!.avatarIndex),
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
                 }
@@ -132,7 +139,8 @@ fun GruppoScreen(
                 }
 
                 Row {
-                    IconButton(onClick = { showShareDialog = true }) {
+                    // Tasto Invita -> Apre il BottomSheet
+                    IconButton(onClick = { showShareSheet = true }) {
                         Icon(Icons.Default.Share, "Invita", tint = MaterialTheme.colorScheme.primary)
                     }
 
@@ -180,7 +188,9 @@ fun GruppoScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(
+                        bottom = paddingValues.calculateBottomPadding() + 100.dp
+                    )
                 ) {
                     items(uscite) { uscita ->
                         UscitaCard(
@@ -194,61 +204,107 @@ fun GruppoScreen(
         }
     }
 
-    if (showShareDialog && gruppo != null) {
-        AlertDialog(
-            onDismissRequest = { showShareDialog = false },
-            title = { Text("Invita Amici", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    Text("Fai scansionare questo QR o invia il codice:", textAlign = TextAlign.Center)
-                    Spacer(modifier = Modifier.height(16.dp))
+    // --- BOTTOM SHEET CONDIVISIONE (Design Moderno) ---
+    if (showShareSheet && gruppo != null) {
+        ModalBottomSheet(
+            onDismissRequest = { showShareSheet = false },
+            sheetState = sheetState
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    // Padding extra in basso per la navigation bar
+                    .padding(bottom = 48.dp)
+            ) {
+                Text(
+                    text = "Invita Amici",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Fai scansionare il QR o condividi il codice",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-                    val qrBitmap = remember(gruppo!!.id) { QrCodeGenerator.generateQrCode(gruppo!!.id) }
-                    if (qrBitmap != null) {
-                        Image(
-                            bitmap = qrBitmap.asImageBitmap(),
-                            contentDescription = "QR Code",
-                            modifier = Modifier.size(200.dp).padding(8.dp)
-                        )
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // QR CODE
+                val qrBitmap = remember(gruppo!!.id) { QrCodeGenerator.generateQrCode(gruppo!!.id) }
+                if (qrBitmap != null) {
+                    Image(
+                        bitmap = qrBitmap.asImageBitmap(),
+                        contentDescription = "QR Code",
+                        modifier = Modifier
+                            .size(200.dp)
+                            .padding(8.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // CODICE TESTUALE
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    shape = MaterialTheme.shapes.medium,
+                    onClick = {
+                        clipboardManager.setText(AnnotatedString(gruppo!!.id))
+                        Toast.makeText(context, "Codice copiato!", Toast.LENGTH_SHORT).show()
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        onClick = {
-                            clipboardManager.setText(AnnotatedString(gruppo!!.id))
-                            Toast.makeText(context, "Codice copiato!", Toast.LENGTH_SHORT).show()
-                        }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
                             text = gruppo!!.id,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleLarge,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(16.dp)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Tocca per copiare",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
                         )
                     }
-                    Text("Tocca il codice per copiarlo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 4.dp))
                 }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, "Unisciti al mio gruppo su CarKarma! Usa questo codice:\n\n${gruppo!!.id}")
-                    }
-                    context.startActivity(Intent.createChooser(shareIntent, "Invia invito..."))
-                }) {
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // PULSANTE INVIO
+                Button(
+                    onClick = {
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, "Unisciti al mio gruppo su CarKarma! Usa questo codice:\n\n${gruppo!!.id}")
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Invia codice..."))
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            if (!sheetState.isVisible) {
+                                showShareSheet = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text("Invia Codice")
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showShareDialog = false }) { Text("Chiudi") }
             }
-        )
+        }
     }
 
+    // --- DIALOG CONFERMA USCITA (Questo rimane un Dialog perché è un alert) ---
     if (showLeaveDialog) {
         AlertDialog(
             onDismissRequest = { showLeaveDialog = false },
@@ -256,7 +312,9 @@ fun GruppoScreen(
             text = { Text("Se esci, non vedrai più questo gruppo nella tua Home, ma i dati non verranno cancellati per gli altri partecipanti.") },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.lasciaGruppo { navController.popBackStack() }; showLeaveDialog = false },
+                    onClick = {
+                        viewModel.lasciaGruppo { navController.popBackStack() }; showLeaveDialog = false
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Lascia Gruppo") }
             },
