@@ -10,7 +10,7 @@ object Config {
     const val GOOGLE_WEB_CLIENT_ID = "1044359789646-f16h1b150i30rva1b14u2h1i390c17mq.apps.googleusercontent.com"
 
     // 2. API Key per GOOGLE MAPS (Directions API)
-    const val GOOGLE_MAPS_KEY = "AIzaSyDPETngv7moP-M8qiA0sillmQcB3Gg6SpA"
+    const val GOOGLE_MAPS_KEY = "AIzaSyA65MnX-3G5L7cDsin7e-my8jt71MPcLuY"
 
     // 3. API Key per OpenRouteService (Mappe)
     // La trovi su openrouteservice.org dashboard

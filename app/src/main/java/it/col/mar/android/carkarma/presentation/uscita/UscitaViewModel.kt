@@ -24,8 +24,8 @@ class UscitaViewModel(
     private val gruppoRepository: GruppoRepository
 ) : ViewModel() {
 
-    // Torniamo a usare la chiave di OpenRouteService dal file Config
-    private val ORS_API_KEY = Config.ORS_API_KEY
+    // USIAMO LA CHIAVE DI GOOGLE MAPS
+    private val MAPS_API_KEY = Config.GOOGLE_MAPS_KEY
 
     private val calcoloUseCase = CalcoloTurnoUseCase()
 
@@ -145,7 +145,7 @@ class UscitaViewModel(
         lastCalculatedOneWayKm = null
     }
 
-    // --- CALCOLO CON OPEN ROUTE SERVICE (ORS) ---
+    // --- CALCOLO CON GOOGLE DIRECTIONS API (Versione Ufficiale) ---
     fun calcolaDistanzaDaMaps() {
         val start = _indirizzoPartenza.value
         val end = _indirizzoDestinazione.value
@@ -155,69 +155,76 @@ class UscitaViewModel(
             return
         }
 
-        if (ORS_API_KEY.contains("YOUR_ORS_API_KEY") || ORS_API_KEY.isEmpty()) {
-            _errorMessage.value = "Manca la API Key di ORS in Config.kt!"
+        // Controllo rapido se la chiave è vuota o sbagliata
+        if (MAPS_API_KEY.isEmpty() || MAPS_API_KEY.contains("YOUR_")) {
+            _errorMessage.value = "Configurazione Chiave Google Maps mancante!"
             return
         }
 
         viewModelScope.launch {
             _isLoadingMaps.value = true
             try {
+                // Eseguiamo la chiamata in background
                 val kmSolaAndata = withContext(Dispatchers.IO) {
-                    // 1. Troviamo le coordinate di partenza
-                    val sCoords = fetchCoordinates(start) ?: throw Exception("Indirizzo partenza non trovato")
-                    // 2. Troviamo le coordinate di destinazione
-                    val eCoords = fetchCoordinates(end) ?: throw Exception("Indirizzo destinazione non trovato")
-                    // 3. Calcoliamo il percorso
-                    fetchRouteDistance(sCoords, eCoords)
+                    fetchGoogleDistance(start, end)
                 }
 
-                if (kmSolaAndata != null) {
-                    lastCalculatedOneWayKm = kmSolaAndata
-                    val multiplier = if (_isAndataRitorno.value) 2 else 1
-                    _kmTotali.value = kmSolaAndata * multiplier
-                    _errorMessage.value = null
-                } else {
-                    _errorMessage.value = "Percorso non trovato."
-                }
+                // Se fetchGoogleDistance non lancia eccezioni, proseguiamo
+                lastCalculatedOneWayKm = kmSolaAndata
+                val multiplier = if (_isAndataRitorno.value) 2 else 1
+                _kmTotali.value = kmSolaAndata * multiplier
+                _errorMessage.value = null
+
             } catch (e: Exception) {
-                _errorMessage.value = "Errore: ${e.message}"
+                // Mostriamo l'errore reale (es. "REQUEST_DENIED") per capire il problema
+                _errorMessage.value = "${e.message}"
             } finally {
                 _isLoadingMaps.value = false
             }
         }
     }
 
-    // Geocoding con ORS
-    private fun fetchCoordinates(address: String): Pair<Double, Double>? {
+    // Funzione specifica per Google Maps (Parsing JSON)
+    private fun fetchGoogleDistance(origin: String, destination: String): Int {
         try {
-            val enc = URLEncoder.encode(address, "UTF-8")
-            val url = "https://api.openrouteservice.org/geocode/search?api_key=$ORS_API_KEY&text=$enc&size=1"
-            val json = JSONObject(URL(url).readText())
-            val feats = json.getJSONArray("features")
-            if (feats.length() > 0) {
-                val coords = feats.getJSONObject(0).getJSONObject("geometry").getJSONArray("coordinates")
-                return Pair(coords.getDouble(0), coords.getDouble(1))
-            }
-        } catch (e: Exception) { e.printStackTrace() }
-        return null
-    }
+            val originEnc = URLEncoder.encode(origin, "UTF-8")
+            val destEnc = URLEncoder.encode(destination, "UTF-8")
 
-    // Routing con ORS
-    private fun fetchRouteDistance(start: Pair<Double, Double>, end: Pair<Double, Double>): Int? {
-        try {
-            val s = "${start.first},${start.second}"
-            val e = "${end.first},${end.second}"
-            val url = "https://api.openrouteservice.org/v2/directions/driving-car?api_key=$ORS_API_KEY&start=$s&end=$e"
-            val json = JSONObject(URL(url).readText())
-            val feats = json.getJSONArray("features")
-            if (feats.length() > 0) {
-                val dist = feats.getJSONObject(0).getJSONObject("properties").getJSONObject("summary").getDouble("distance")
-                // Convertiamo metri in km con arrotondamento
-                return ((dist / 1000) + 0.5).toInt()
+            // URL ufficiale Google Directions
+            val url = "https://maps.googleapis.com/maps/api/directions/json?origin=$originEnc&destination=$destEnc&key=$MAPS_API_KEY"
+
+            val jsonResponse = URL(url).readText()
+            val jsonObject = JSONObject(jsonResponse)
+
+            // Controllo dello Status di Google
+            val status = jsonObject.getString("status")
+            if (status != "OK") {
+                Log.e("CarKarmaMaps", "Google API Error: $status")
+                val msg = when(status) {
+                    "REQUEST_DENIED" -> "Accesso negato. Controlla che la chiave sia attiva, il Billing abilitato e la 'Directions API' accesa."
+                    "OVER_QUERY_LIMIT" -> "Quota superata o fatturazione non attiva su Google Cloud."
+                    "ZERO_RESULTS" -> "Nessun percorso trovato tra questi indirizzi."
+                    else -> "Errore Google Maps: $status"
+                }
+                throw Exception(msg)
             }
-        } catch (e: Exception) { e.printStackTrace() }
-        return null
+
+            // Parsing della risposta
+            val routes = jsonObject.getJSONArray("routes")
+            if (routes.length() > 0) {
+                val legs = routes.getJSONObject(0).getJSONArray("legs")
+                if (legs.length() > 0) {
+                    val distance = legs.getJSONObject(0).getJSONObject("distance")
+                    val meters = distance.getInt("value")
+                    // Convertiamo metri in km (arrotondamento per eccesso)
+                    return ((meters + 500) / 1000)
+                }
+            }
+            throw Exception("Risposta vuota da Google Maps.")
+        } catch (e: Exception) {
+            // Rilanciamo l'eccezione per farla catturare sopra
+            throw e
+        }
     }
 
     // --- ALGORITMO SUGGERIMENTO ---
