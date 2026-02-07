@@ -1,6 +1,6 @@
 package it.col.mar.android.carkarma.presentation.uscita
 
-import androidx.compose.foundation.BorderStroke // <--- IMPORT AGGIUNTO
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -10,7 +10,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddLocation
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -74,24 +73,26 @@ fun UscitaScreen(
 
     val scrollState = rememberScrollState()
 
-    Scaffold(
-        containerColor = androidx.compose.ui.graphics.Color.Transparent
-    ) { paddingValues ->
+    // MODIFICA: Usiamo un Box invece dello Scaffold interno per uniformità con le altre schermate
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                // FIX SPAZIO: Padding top calcolato dallo scaffold per evitare il buco bianco
-                .padding(top = paddingValues.calculateTopPadding())
                 .verticalScroll(scrollState)
-                .padding(horizontal = 16.dp, vertical = 16.dp)
+                .padding(horizontal = 16.dp)
+                // Padding inferiore extra per non tagliare l'ultimo bottone se lo schermo è piccolo
+                .padding(bottom = 32.dp)
         ) {
             // Intestazione
             Text(
                 text = if (isEditing) "Modifica Uscita" else "Nuova Uscita",
                 style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary,
+                // MODIFICA COLORE: Uniformato a "onBackground" come nella Home
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 24.dp)
+                modifier = Modifier.padding(bottom = 24.dp, top = 0.dp) // Top 0 per attaccarlo alla barra
             )
 
             // Campo Nome
@@ -246,12 +247,11 @@ fun UscitaScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- BOTTONE SUGGERIMENTO ALGORITMO (Con stile diverso) ---
+            // --- BOTTONE SUGGERIMENTO ALGORITMO ---
             if (!isEditing && partecipantiSelezionati.size >= 2) {
                 OutlinedButton(
                     onClick = { viewModel.calcolaSuggerimento() },
                     modifier = Modifier.fillMaxWidth(),
-                    // QUI serviva l'import di BorderStroke
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary)
                 ) {
                     Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
@@ -318,12 +318,10 @@ fun UscitaScreen(
                     Text("Elimina Uscita")
                 }
             }
-
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 
-    // --- BOTTOM SHEET PER IL SUGGERIMENTO (NUOVO!) ---
+    // --- BOTTOM SHEET PER IL SUGGERIMENTO ---
     if (showSuggestionSheet) {
         ModalBottomSheet(
             onDismissRequest = {
@@ -336,7 +334,7 @@ fun UscitaScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(24.dp)
-                    .padding(bottom = 32.dp), // Spazio per la navigation bar
+                    .padding(bottom = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -348,7 +346,6 @@ fun UscitaScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Icona grande auto
                 Icon(
                     imageVector = Icons.Default.DirectionsCar,
                     contentDescription = null,
@@ -360,7 +357,7 @@ fun UscitaScreen(
 
                 Text(
                     text = suggerimento ?: "",
-                    style = MaterialTheme.typography.headlineSmall, // Testo grande per il nome
+                    style = MaterialTheme.typography.headlineSmall,
                     textAlign = TextAlign.Center
                 )
 
@@ -397,7 +394,7 @@ fun UscitaScreen(
         AlertDialog(
             onDismissRequest = { showEliminaDialog = false },
             title = { Text("Eliminare?") },
-            text = { Text("L'operazione è irreversibile.") },
+            text = { Text("L'operazione è irreversibile e i km verranno rimossi dalle statistiche.") },
             confirmButton = {
                 Button(
                     onClick = { viewModel.eliminaUscita { navController.popBackStack() }; showEliminaDialog = false },

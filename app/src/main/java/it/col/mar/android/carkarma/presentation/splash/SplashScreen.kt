@@ -1,6 +1,7 @@
 package it.col.mar.android.carkarma.presentation.splash
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -59,15 +60,16 @@ fun SplashScreen(
             timeElapsed += checkInterval
         }
 
-        // 3. USCITA (Esplosione)
+        // 3. USCITA (Esplosione che parte piano e accelera)
         launch {
-            scale.animateTo(50f, tween(400)) // Esplosione rapida
+            // Curva personalizzata: parte lento e accelera progressivamente (EaseIn)
+            scale.animateTo(50f, tween(800, easing = CubicBezierEasing(0.3f, 0f, 1f, 1f)))
         }
         launch {
-            alpha.animateTo(0f, tween(300))
+            alpha.animateTo(0f, tween(350, easing = CubicBezierEasing(0.7f, 0f, 1f, 1f)))
         }
 
-        delay(300)
+        delay(500)
         onAnimationFinished()
     }
 

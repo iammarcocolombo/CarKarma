@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatisticheScreen(
     navController: NavController,
@@ -42,95 +41,106 @@ fun StatisticheScreen(
     val media by viewModel.mediaKm.collectAsState()
     val classifica by viewModel.classifica.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Statistiche $nomeGruppo", style = MaterialTheme.typography.titleMedium) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { paddingValues ->
-        Column(
+    // RIMOSSO SCAFFOLD INTERNO: Usiamo direttamente la Colonna per gestire gli spazi
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            // Padding inferiore per non coprire l'ultimo elemento con la barra di sistema
+            .padding(bottom = 16.dp)
+    ) {
+        // --- HEADER COMPATTO (Sostituisce la TopAppBar) ---
+        // Riduce drasticamente lo spazio verticale
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp)
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 16.dp)
         ) {
-            // --- HEADER BOLLE ---
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // MODIFICA SPAZIO: Ridotto top a 8dp (era 16 verticale) per alzare il blocco
-                    .padding(top = 8.dp, bottom = 16.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+            IconButton(
+                onClick = { navController.popBackStack() },
+                modifier = Modifier.size(24.dp) // Icona piccola
             ) {
-                StatBubble(
-                    label = "Km Totali",
-                    value = "$kmTotali",
-                    icon = Icons.Default.DirectionsCar,
-                    color = MaterialTheme.colorScheme.primaryContainer
-                )
-                StatBubble(
-                    label = "Uscite",
-                    value = "$nUscite",
-                    icon = Icons.Default.Timeline,
-                    color = MaterialTheme.colorScheme.secondaryContainer
-                )
-                StatBubble(
-                    label = "Media/Viaggio",
-                    value = "$media",
-                    icon = Icons.Default.Equalizer,
-                    color = MaterialTheme.colorScheme.tertiaryContainer
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Intestazione Lista (Pulita)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Classifica Karma",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                // La stellina la lascio perché è carina e occupa poco, ma ho tolto la scritta tecnica
                 Icon(
-                    imageVector = Icons.Default.Star,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Indietro",
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = "Statistiche $nomeGruppo",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
 
-            Spacer(modifier = Modifier.height(12.dp))
+        // --- HEADER BOLLE ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp), // Spazio sotto le bolle
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            StatBubble(
+                label = "Km Totali",
+                value = "$kmTotali",
+                icon = Icons.Default.DirectionsCar,
+                color = MaterialTheme.colorScheme.primaryContainer
+            )
+            StatBubble(
+                label = "Uscite",
+                value = "$nUscite",
+                icon = Icons.Default.Timeline,
+                color = MaterialTheme.colorScheme.secondaryContainer
+            )
+            StatBubble(
+                label = "Media/Viaggio",
+                value = "$media",
+                icon = Icons.Default.Equalizer,
+                color = MaterialTheme.colorScheme.tertiaryContainer
+            )
+        }
 
-            // --- LISTA CLASSIFICA ---
-            if (classifica.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Nessun dato sufficiente per la classifica.", color = MaterialTheme.colorScheme.outline)
-                }
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 24.dp)
-                ) {
-                    items(classifica) { stat ->
-                        ClassificaItem(stat)
-                    }
+        // Intestazione Lista
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Classifica Karma",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Default.Star,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // --- LISTA CLASSIFICA ---
+        if (classifica.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Nessun dato sufficiente per la classifica.", color = MaterialTheme.colorScheme.outline)
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
+                items(classifica) { stat ->
+                    ClassificaItem(stat)
                 }
             }
         }
     }
 }
 
+// ... StatBubble e ClassificaItem rimangono uguali ...
 @Composable
 fun StatBubble(label: String, value: String, icon: ImageVector, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -160,7 +170,6 @@ fun ClassificaItem(stat: StatisticaMembro) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Colonna Sinistra: Nome e Conteggio Uscite
                 Column {
                     Text(
                         text = stat.amico.nome,
@@ -174,7 +183,6 @@ fun ClassificaItem(stat: StatisticaMembro) {
                     )
                 }
 
-                // Colonna Destra: Badge Karma
                 Surface(
                     color = if (stat.isSanto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.errorContainer,
                     shape = MaterialTheme.shapes.small
@@ -197,10 +205,7 @@ fun ClassificaItem(stat: StatisticaMembro) {
                     }
                 }
             }
-
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Barra di progresso (Km totali rispetto al totale del gruppo)
             LinearProgressIndicator(
                 progress = { stat.percentuale },
                 modifier = Modifier

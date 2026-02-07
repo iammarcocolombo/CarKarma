@@ -11,7 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BarChart // Import per l'icona del grafico
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.List
@@ -76,25 +76,17 @@ fun GruppoScreen(
         return
     }
 
-    Scaffold(
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { navController.navigate("uscita/${gruppoId}") },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Nuova Uscita") }
-            )
-        },
-        containerColor = androidx.compose.ui.graphics.Color.Transparent
-    ) { paddingValues ->
+    // MODIFICA: Usiamo un Box invece dello Scaffold interno per controllo totale
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = paddingValues.calculateTopPadding())
+                // Nessun padding top: il contenuto parte subito sotto la TopBar globale
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
+            // Rimosso Spacer(8.dp): L'avatar è attaccato in alto per massimizzare lo spazio
 
             // --- AVATAR GRUPPO ---
             Box(
@@ -104,7 +96,10 @@ fun GruppoScreen(
                 Surface(
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(80.dp)
+                    modifier = Modifier
+                        .size(80.dp)
+                        // Piccolo padding top interno solo per non tagliare l'ombra dell'icona
+                        .padding(top = 4.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         AvatarProvider.DisplayAvatar(
@@ -140,12 +135,12 @@ fun GruppoScreen(
                 }
 
                 Row {
-                    // 1. STATISTICHE (Nuovo Tasto)
+                    // 1. STATISTICHE
                     IconButton(onClick = { navController.navigate("statistiche/${gruppo!!.id}") }) {
                         Icon(Icons.Default.BarChart, "Statistiche", tint = MaterialTheme.colorScheme.tertiary)
                     }
 
-                    // 2. INVITA (Apre il BottomSheet)
+                    // 2. INVITA (Apre BottomSheet)
                     IconButton(onClick = { showShareSheet = true }) {
                         Icon(Icons.Default.Share, "Invita", tint = MaterialTheme.colorScheme.primary)
                     }
@@ -196,9 +191,8 @@ fun GruppoScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(
-                        bottom = paddingValues.calculateBottomPadding() + 100.dp
-                    )
+                    // Padding inferiore per non far coprire l'ultimo elemento dal FAB
+                    contentPadding = PaddingValues(bottom = 100.dp)
                 ) {
                     items(uscite) { uscita ->
                         UscitaCard(
@@ -210,6 +204,18 @@ fun GruppoScreen(
                 }
             }
         }
+
+        // FAB posizionato manualmente
+        ExtendedFloatingActionButton(
+            onClick = { navController.navigate("uscita/${gruppoId}") },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            icon = { Icon(Icons.Default.Add, contentDescription = null) },
+            text = { Text("Nuova Uscita") },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        )
     }
 
     // --- BOTTOM SHEET CONDIVISIONE ---
@@ -240,7 +246,6 @@ fun GruppoScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // QR CODE
                 val qrBitmap = remember(gruppo!!.id) { QrCodeGenerator.generateQrCode(gruppo!!.id) }
                 if (qrBitmap != null) {
                     Image(
@@ -254,7 +259,6 @@ fun GruppoScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // CODICE TESTUALE
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -287,7 +291,6 @@ fun GruppoScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // PULSANTE INVIO
                 Button(
                     onClick = {
                         val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -311,7 +314,6 @@ fun GruppoScreen(
         }
     }
 
-    // --- DIALOG CONFERMA USCITA ---
     if (showLeaveDialog) {
         AlertDialog(
             onDismissRequest = { showLeaveDialog = false },

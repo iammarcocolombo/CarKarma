@@ -60,40 +60,16 @@ fun HomeScreen(
         }
     }
 
-    // Scaffold locale trasparente per i FAB
-    Scaffold(
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
-        floatingActionButton = {
-            Column(horizontalAlignment = Alignment.End) {
-                // FAB SECONDARIO: Unisciti a Gruppo (Codice manuale)
-                SmallFloatingActionButton(
-                    onClick = { showJoinDialog = true },
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                ) {
-                    Icon(Icons.Default.GroupAdd, contentDescription = "Unisciti")
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // FAB PRINCIPALE: Crea Gruppo
-                FloatingActionButton(
-                    onClick = { navController.navigate("modificaGruppo") },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Nuovo Gruppo")
-                }
-            }
-        }
-    ) { paddingValues ->
+    // MODIFICA: Usiamo un Box invece dello Scaffold interno per controllo totale del layout (come GruppoScreen)
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .padding(horizontal = 16.dp)
         ) {
-            // Titolo interno (Padding ottimizzato come richiesto)
+            // Titolo interno (Padding ottimizzato)
             Text(
                 text = "I tuoi Gruppi",
                 style = MaterialTheme.typography.titleLarge,
@@ -134,7 +110,7 @@ fun HomeScreen(
                 // --- LISTA GRUPPI ---
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 100.dp) // Spazio per i FAB
+                    contentPadding = PaddingValues(bottom = 120.dp) // Spazio abbondante per i FAB
                 ) {
                     items(gruppi) { gruppo ->
                         GruppoCard(
@@ -144,6 +120,34 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                     }
                 }
+            }
+        }
+
+        // FABs Posizionati manualmente in basso a destra
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            // FAB SECONDARIO: Unisciti a Gruppo (Codice manuale)
+            SmallFloatingActionButton(
+                onClick = { showJoinDialog = true },
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            ) {
+                Icon(Icons.Default.GroupAdd, contentDescription = "Unisciti")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // FAB PRINCIPALE: Crea Gruppo
+            FloatingActionButton(
+                onClick = { navController.navigate("modificaGruppo") },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Nuovo Gruppo")
             }
         }
     }

@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import it.col.mar.android.carkarma.util.AvatarProvider
@@ -43,18 +44,26 @@ fun ModificaGruppoScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            // MODIFICA: Padding solo orizzontale e inferiore.
+            // Rimosso il padding 'top' implicito del 'padding(16.dp)' per attaccarlo alla barra.
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 16.dp)
     ) {
         // Intestazione
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                // Aggiungiamo un minimo di spazio sotto il titolo
+                .padding(bottom = 16.dp, top = 0.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = if (!isEditing) "Crea Nuovo Gruppo" else "Modifica Gruppo",
                 style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary
+                // MODIFICA COLORE: Uniformato a onBackground
+                color = MaterialTheme.colorScheme.onBackground,
+                fontWeight = FontWeight.Bold
             )
             if (isEditing) {
                 IconButton(onClick = { showDeleteDialog = true }) {
@@ -66,8 +75,6 @@ fun ModificaGruppoScreen(
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         // Campo Nome
         OutlinedTextField(
@@ -87,7 +94,6 @@ fun ModificaGruppoScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            // Usiamo la nuova lista ibrida di AvatarProvider
             itemsIndexed(AvatarProvider.avatars) { index, avatar ->
                 val isSelected = index == avatarIndex
 
@@ -107,7 +113,6 @@ fun ModificaGruppoScreen(
                         )
                         .clickable { viewModel.onAvatarSelected(index) }
                 ) {
-                    // Usiamo il componente DisplayAvatar per mostrare sia vettori che risorse
                     AvatarProvider.DisplayAvatar(
                         avatar = avatar,
                         contentDescription = null,
@@ -149,7 +154,6 @@ fun ModificaGruppoScreen(
                     )
 
                     IconButton(onClick = {
-                        // Naviga a modifica amico passando il gruppoId corrente
                         navController.navigate("amico?amicoId=${amico.id}&gruppoId=$gruppoId")
                     }) {
                         Icon(Icons.Default.Edit, contentDescription = "Modifica Amico")
