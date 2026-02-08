@@ -133,24 +133,23 @@ fun AmicoScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // INPUT CONSUMO (Aggiornato a Km/L)
+            // INPUT CONSUMO (Tornato a L/100km)
             OutlinedTextField(
                 value = consumoMedio,
                 onValueChange = { viewModel.onConsumoChange(it) },
-                label = { Text("Efficienza") },
-                placeholder = { Text("Es. 15") },
+                label = { Text("Consumo Medio") },
+                placeholder = { Text("Es. 7.5") },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.EvStation, null) },
-                // KeyboardType.Decimal per permettere punto e virgola
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth(),
-                // Suffisso dinamico: Km/L per carburanti liquidi, Km/kWh per elettrico
-                suffix = { Text(if (tipoCarburante == "Elettrico") "Km/kWh" else "Km/L") }
+                // Suffisso dinamico corretto
+                suffix = { Text(if (tipoCarburante == "Elettrico") "kWh/100km" else "L/100km") }
             )
 
             // Helper Text Aggiornato
             Text(
-                text = "Inserisci quanti km percorri con un litro (es. 15,5). Lascia vuoto per usare il valore standard.",
+                text = "Inserisci quanti litri (o kWh) servono per fare 100km. Lascia vuoto per usare lo standard.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(top = 4.dp, start = 4.dp)

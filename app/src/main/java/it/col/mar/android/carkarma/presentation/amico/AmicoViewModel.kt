@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 class AmicoViewModel(
     private val amicoRepository: AmicoRepository,
@@ -72,7 +73,7 @@ class AmicoViewModel(
     fun onTipoCarburanteChange(t: String) { _tipoCarburante.value = t }
 
     fun onConsumoChange(c: String) {
-        // Accettiamo solo cifre, punto e virgola per evitare crash
+        // Accettiamo solo cifre, punto e virgola per evitare crash durante l'input
         if (c.all { it.isDigit() || it == '.' || it == ',' }) {
             _consumoMedio.value = c
         }
@@ -99,9 +100,8 @@ class AmicoViewModel(
                                 tipoCarburante = _tipoCarburante.value,
                                 consumoMedio = consumo
                             )
-                            // Usiamo aggiungiMembroAlGruppo che fa un .set() sovrascrivendo i dati
-                            // Nota: Dato che 'amicoAggiornato' ha già le statistiche vecchie dentro, non le perdiamo.
-                            gruppoRepository.aggiungiMembroAlGruppo(currentGruppoId, amicoAggiornato)
+                            // Usiamo la funzione specifica di update per non perdere i dati statistici
+                            gruppoRepository.aggiornaAnagraficaMembro(currentGruppoId, amicoAggiornato)
                         }
                     }
                 } else {
@@ -121,12 +121,14 @@ class AmicoViewModel(
                     } else {
                         // Nuovo amico
                         Amico(
-                            id = if(currentAmicoId.isNotEmpty()) currentAmicoId else java.util.UUID.randomUUID().toString(),
+                            id = if(currentAmicoId.isNotEmpty()) currentAmicoId else UUID.randomUUID().toString(),
                             nome = _nome.value,
                             postiAuto = posti,
-                            // I nuovi campi hanno valori di default nel costruttore, ma li settiamo esplicitamente
                             tipoCarburante = _tipoCarburante.value,
-                            consumoMedio = consumo
+                            consumoMedio = consumo,
+                            uscite = 0,
+                            guide = 0,
+                            km = 0
                         )
                     }
 

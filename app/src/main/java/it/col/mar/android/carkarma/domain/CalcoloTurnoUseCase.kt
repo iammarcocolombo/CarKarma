@@ -5,105 +5,91 @@ import kotlin.math.max
 
 class CalcoloTurnoUseCase {
 
-    // Definiamo un consumo standard di riferimento (es. 14 km/litro per una media benzina)
-    // Questo serve per normalizzare i punteggi.
-    private val STANDARD_KM_LITRO = 14.0
+    // CONSUMO STANDARD DI RIFERIMENTO (Litri per 100km)
+    // 7.0 L/100km corrisponde circa ai vecchi 14 km/l.
+    private val STANDARD_CONSUMO = 7.0
+
+    // Prezzo standard se l'API fallisce
+    private val STANDARD_PREZZO = 1.80
 
     /**
-     * Calcola dinamicamente quanti guidatori servono basandosi sul "Karma Pesato".
-     * Il Karma ora tiene conto anche dell'efficienza dell'auto (consumi).
+     * Calcola chi deve guidare basandosi sul Karma ACCUMULATO nel tempo.
+     *
+     * @param prezziCarburante Mappa con i prezzi (es. "Benzina" -> 1.859).
+     * È questo il parametro che mancava e causava l'errore!
      */
     fun calcolaChiGuida(
         membriGruppo: List<Amico>,
-        presentiIds: Set<String>
+        presentiIds: Set<String>,
+        prezziCarburante: Map<String, Double> = emptyMap()
     ): List<Pair<Amico, Double>> {
 
-        // 1. Identifichiamo chi è presente
         val presenti = membriGruppo.filter { presentiIds.contains(it.id) }
         val numeroPersone = presenti.size
 
         if (numeroPersone < 2) return emptyList()
 
-        // 2. Calcolo dei "Km Equivalenti" (Peso economico) per ogni membro
-        // Se hai guidato 100km con una Ferrari (che consuma tanto), valgono come 200km di una Panda.
-        val mappaKmEquivalenti = membriGruppo.associate { amico ->
-            amico.id to calcolaKmEquivalenti(amico)
+        // 1. Recuperiamo il Karma Storico
+        val mappaKarma = presenti.associate { amico ->
+            val valoreKarmaReale = if (amico.karma != 0.0) amico.karma else amico.km.toDouble()
+            amico.id to valoreKarmaReale
         }
 
-        // 3. Statistiche Gruppo per il calcolo della media
-        val totaleKmEquivalentiGruppo = mappaKmEquivalenti.values.sum()
+        // 2. Calcolo Media del Gruppo
+        val totaleKarmaGruppo = mappaKarma.values.sum()
         val presenzeTotaliGruppo = membriGruppo.sumOf { it.uscite }
 
-        // Il "Costo medio" per ogni uscita fatta.
-        // Chi è uscito 10 volte "deve" al gruppo 10 * costoMedio.
         val debitoPerPresenza = if (presenzeTotaliGruppo > 0) {
-            totaleKmEquivalentiGruppo / presenzeTotaliGruppo
+            totaleKarmaGruppo / presenzeTotaliGruppo
         } else {
             0.0
         }
 
-        // 4. Classifica Karma Pesato
-        // Karma = (Quanto ho dato * FattoreAuto) - (Quanto ho ricevuto * MediaGruppo)
+        // 3. Classifica Bilancio
         val classificaBase = presenti.map { amico ->
-            val kmFattiPesati = mappaKmEquivalenti[amico.id] ?: 0.0
-            val debitoAccumulato = amico.uscite * debitoPerPresenza
+            val mioKarma = mappaKarma[amico.id] ?: 0.0
+            val mioDebito = amico.uscite * debitoPerPresenza
+            val bilancio = mioKarma - mioDebito
+            amico to bilancio
+        }.sortedBy { it.second }
 
-            // KARMA: Più è basso, più sei in debito (e devi guidare)
-            val karma = kmFattiPesati - debitoAccumulato
-
-            amico to karma
-        }.sortedBy { it.second } // Ordinati dal Karma peggiore (più basso) a salire
-
-        // --- FASE DECISIONALE DINAMICA (LOGICA AUTO) ---
-
-        // TENTATIVO A: Basta una macchina sola?
+        // 4. Selezione Guidatori
         val candidatiUnici = classificaBase.filter { (amico, _) ->
             amico.postiAuto >= numeroPersone
         }
 
         if (candidatiUnici.isNotEmpty()) {
-            // Prendiamo il primo della lista (quello con Karma più basso/peggiore)
             return listOf(candidatiUnici.first())
         }
 
-        // TENTATIVO B: Servono più macchine
         val guidatoriScelti = mutableListOf<Pair<Amico, Double>>()
         var postiCoperti = 0
 
         for (candidato in classificaBase) {
             guidatoriScelti.add(candidato)
             postiCoperti += candidato.first.postiAuto
-
-            if (postiCoperti >= numeroPersone) {
-                break
-            }
+            if (postiCoperti >= numeroPersone) break
         }
 
         return guidatoriScelti
     }
 
     /**
-     * Calcola i km "pesati" in base al consumo dell'auto.
-     * Logica:
-     * - Consumo Standard (14 km/l) -> Moltiplicatore 1.0
-     * - Consumo Alto (es. 7 km/l) -> Moltiplicatore 2.0 (I tuoi km valgono doppio perché spendi il doppio)
-     * - Consumo Basso (es. 28 km/l) -> Moltiplicatore 0.5
+     * Calcola il "Moltiplicatore" per il viaggio di OGGI.
+     * Serve al ViewModel per sapere quanti punti aggiungere.
      */
-    private fun calcolaKmEquivalenti(amico: Amico): Double {
-        val kmReali = amico.km.toDouble()
+    fun calcolaFattoreAttuale(amico: Amico, prezzi: Map<String, Double>): Double {
+        if (amico.consumoMedio <= 0.0) return 1.0
 
-        // Se l'utente non ha impostato il consumo, usiamo lo standard (fattore 1.0)
-        if (amico.consumoMedio <= 0.0) return kmReali
+        val consumoUtente = amico.consumoMedio // Litri per 100km
 
-        // Normalizzazione per auto Elettriche (opzionale, per ora le trattiamo in base al numero inserito)
-        // Se volessimo essere precisi sui costi, qui dovremmo convertire km/kWh in km/L equivalenti.
-        // Per ora usiamo la logica pura dell'efficienza inserita dall'utente.
+        // Fattore Consumo: Più alto è (più beve l'auto), più punti meriti
+        val fattoreConsumo = consumoUtente / STANDARD_CONSUMO
 
-        val efficienzaUtente = amico.consumoMedio // Km al Litro (o Km al kWh)
+        // Fattore Prezzo: Più costa al litro, più punti meriti
+        val prezzoAlLitro = prezzi[amico.tipoCarburante] ?: STANDARD_PREZZO
+        val fattorePrezzo = prezzoAlLitro / STANDARD_PREZZO
 
-        // Formula inversa: Meno km fai con un litro, più alto è il peso del tuo sacrificio
-        val fattoreAuto = STANDARD_KM_LITRO / efficienzaUtente
-
-        return kmReali * fattoreAuto
+        return fattoreConsumo * fattorePrezzo
     }
 }

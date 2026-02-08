@@ -27,7 +27,7 @@ class GruppoRepository(
     private val _gruppi = MutableStateFlow<List<Gruppo>>(emptyList())
     val gruppi: StateFlow<List<Gruppo>> = _gruppi.asStateFlow()
 
-    // NUOVO: Stato per sapere se abbiamo finito il caricamento iniziale
+    // Stato per sapere se abbiamo finito il caricamento iniziale
     private val _isDataLoaded = MutableStateFlow(false)
     val isDataLoaded: StateFlow<Boolean> = _isDataLoaded.asStateFlow()
 
@@ -42,20 +42,15 @@ class GruppoRepository(
                         if (e != null) return@addSnapshotListener
                         if (snapshot != null) {
                             _gruppi.value = snapshot.toObjects<Gruppo>()
-                            // APPENA ARRIVANO I DATI, METTIAMO A TRUE
                             _isDataLoaded.value = true
                         }
                     }
             } else {
                 _gruppi.value = emptyList()
-                // SE NON SIAMO LOGGATI, È COMUNQUE "CARICATO" (Pronto per il login)
                 _isDataLoaded.value = true
             }
         }
     }
-
-    // --- LE ALTRE FUNZIONI RIMANGONO IDENTICHE ---
-    // (Le riporto per completezza del file, così puoi copiare tutto)
 
     suspend fun sincronizzaMembriInRubrica(listaGruppi: List<Gruppo>) {
         if (auth.currentUser == null) return
@@ -105,7 +100,8 @@ class GruppoRepository(
     }
 
     fun aggiungiMembroAlGruppo(gruppoId: String, amicoTemplate: Amico) {
-        val nuovoMembro = amicoTemplate.copy(uscite = 0, guide = 0, km = 0)
+        // ATTENZIONE: Questa funzione resetta le stats! Usare solo per NUOVI membri.
+        val nuovoMembro = amicoTemplate.copy(uscite = 0, guide = 0, km = 0, karma = 0.0)
         db.collection("gruppi").document(gruppoId).collection("membri").document(nuovoMembro.id).set(nuovoMembro)
     }
 
@@ -113,23 +109,43 @@ class GruppoRepository(
         db.collection("gruppi").document(gruppoId).collection("membri").document(amicoId).delete()
     }
 
-    fun aggiornaStatisticheMembro(gruppoId: String, amicoId: String, deltaUscite: Int, deltaGuide: Int, deltaKm: Int) {
+    // AGGIORNATO: Ora accetta deltaKarma per accumulare il punteggio storico
+    fun aggiornaStatisticheMembro(
+        gruppoId: String,
+        amicoId: String,
+        deltaUscite: Int,
+        deltaGuide: Int,
+        deltaKm: Int,
+        deltaKarma: Double // <--- Parametro nuovo
+    ) {
         val docRef = db.collection("gruppi").document(gruppoId).collection("membri").document(amicoId)
         db.runTransaction { transaction ->
             val snapshot = transaction.get(docRef)
             val amico = snapshot.toObject(Amico::class.java) ?: return@runTransaction
+
+            // Migrazione al volo: se è un vecchio utente con karma 0 ma km > 0,
+            // assumiamo che il vecchio karma sia uguale ai km (1:1 standard)
+            val karmaAttuale = if (amico.karma != 0.0) amico.karma else amico.km.toDouble()
+
             val updates = mapOf(
                 "uscite" to (amico.uscite + deltaUscite).coerceAtLeast(0),
                 "guide" to (amico.guide + deltaGuide).coerceAtLeast(0),
-                "km" to (amico.km + deltaKm).coerceAtLeast(0)
+                "km" to (amico.km + deltaKm).coerceAtLeast(0),
+                "karma" to (karmaAttuale + deltaKarma).coerceAtLeast(0.0) // Aggiorniamo il salvadanaio
             )
             transaction.update(docRef, updates)
         }
     }
 
+    // Aggiorna solo i dati anagrafici e auto, senza toccare le statistiche
     fun aggiornaAnagraficaMembro(gruppoId: String, amico: Amico) {
         val docRef = db.collection("gruppi").document(gruppoId).collection("membri").document(amico.id)
-        val updates = mapOf("nome" to amico.nome, "postiAuto" to amico.postiAuto)
+        val updates = mapOf(
+            "nome" to amico.nome,
+            "postiAuto" to amico.postiAuto,
+            "tipoCarburante" to amico.tipoCarburante,
+            "consumoMedio" to amico.consumoMedio
+        )
         docRef.update(updates)
     }
 

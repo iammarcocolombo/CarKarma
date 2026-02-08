@@ -3,6 +3,7 @@ package it.col.mar.android.carkarma.presentation.uscita
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import it.col.mar.android.carkarma.data.database.CarburanteRepository
 import it.col.mar.android.carkarma.data.database.GruppoRepository
 import it.col.mar.android.carkarma.data.database.UscitaRepository
 import it.col.mar.android.carkarma.data.model.Amico
@@ -21,7 +22,8 @@ import java.util.Locale
 
 class UscitaViewModel(
     private val uscitaRepository: UscitaRepository,
-    private val gruppoRepository: GruppoRepository
+    private val gruppoRepository: GruppoRepository,
+    private val carburanteRepository: CarburanteRepository // Iniezione del repo prezzi
 ) : ViewModel() {
 
     // USIAMO LA CHIAVE DI GOOGLE MAPS
@@ -31,30 +33,23 @@ class UscitaViewModel(
 
     private var currentUscitaId: String = ""
     private var currentGruppoId: String = ""
-
-    // Salviamo l'uscita originale per poter fare il "revert" delle statistiche in caso di modifica
     private var originalUscita: Uscita? = null
-
-    // Memorizza i km di sola andata calcolati dall'API per ricalcoli veloci dello switch A/R
     private var lastCalculatedOneWayKm: Int? = null
 
     private val _nomeUscita = MutableStateFlow("")
     val nomeUscita: StateFlow<String> = _nomeUscita
 
-    // --- CAMPI INDIRIZZO ---
     private val _indirizzoPartenza = MutableStateFlow("")
     val indirizzoPartenza: StateFlow<String> = _indirizzoPartenza
 
     private val _indirizzoDestinazione = MutableStateFlow("")
     val indirizzoDestinazione: StateFlow<String> = _indirizzoDestinazione
 
-    // Stato Andata/Ritorno
     private val _isAndataRitorno = MutableStateFlow(true)
     val isAndataRitorno: StateFlow<Boolean> = _isAndataRitorno
 
     private val _isLoadingMaps = MutableStateFlow(false)
     val isLoadingMaps: StateFlow<Boolean> = _isLoadingMaps
-    // -----------------------
 
     private val _amiciDelGruppo = MutableStateFlow<List<Amico>>(emptyList())
     val amiciDelGruppo: StateFlow<List<Amico>> = _amiciDelGruppo
@@ -78,20 +73,17 @@ class UscitaViewModel(
         this.currentGruppoId = gruppoId
         this.currentUscitaId = uscitaId
 
-        // 1. Carichiamo i membri dal GRUPPO (sottocollezione)
         viewModelScope.launch {
             gruppoRepository.getMembriDelGruppo(gruppoId).collect { membri ->
                 _amiciDelGruppo.value = membri
             }
         }
 
-        // 2. Se è una modifica, carichiamo i dati dell'uscita
         if (uscitaId.isNotEmpty()) {
             viewModelScope.launch {
                 val uscita = uscitaRepository.getUscita(gruppoId, uscitaId)
                 if (uscita != null) {
-                    originalUscita = uscita // Importante: salviamo copia per il rollback
-
+                    originalUscita = uscita
                     _nomeUscita.value = uscita.nome
                     _partecipantiSelezionati.value = uscita.partecipantiIds.toSet()
                     _guidatoriSelezionati.value = uscita.guidatoriIds.toSet()
@@ -108,10 +100,8 @@ class UscitaViewModel(
     fun onPartenzaChange(v: String) { _indirizzoPartenza.value = v }
     fun onDestinazioneChange(v: String) { _indirizzoDestinazione.value = v }
 
-    // Gestione cambio Andata/Ritorno con ricalcolo immediato
     fun onAndataRitornoChange(isAR: Boolean) {
         _isAndataRitorno.value = isAR
-        // Se abbiamo un valore base calcolato dall'API, lo usiamo per aggiornare i km
         if (lastCalculatedOneWayKm != null) {
             val multiplier = if (isAR) 2 else 1
             _kmTotali.value = lastCalculatedOneWayKm!! * multiplier
@@ -141,11 +131,10 @@ class UscitaViewModel(
 
     fun setKmTotali(km: Int) {
         _kmTotali.value = km
-        // Se l'utente modifica a mano, rompiamo il legame con il calcolo automatico precedente
         lastCalculatedOneWayKm = null
     }
 
-    // --- CALCOLO CON GOOGLE DIRECTIONS API (Versione Ufficiale) ---
+    // --- CALCOLO DISTANZA (GOOGLE MAPS) ---
     fun calcolaDistanzaDaMaps() {
         val start = _indirizzoPartenza.value
         val end = _indirizzoDestinazione.value
@@ -155,7 +144,6 @@ class UscitaViewModel(
             return
         }
 
-        // Controllo rapido se la chiave è vuota o sbagliata
         if (MAPS_API_KEY.isEmpty() || MAPS_API_KEY.contains("YOUR_")) {
             _errorMessage.value = "Configurazione Chiave Google Maps mancante!"
             return
@@ -164,70 +152,57 @@ class UscitaViewModel(
         viewModelScope.launch {
             _isLoadingMaps.value = true
             try {
-                // Eseguiamo la chiamata in background
                 val kmSolaAndata = withContext(Dispatchers.IO) {
                     fetchGoogleDistance(start, end)
                 }
 
-                // Se fetchGoogleDistance non lancia eccezioni, proseguiamo
                 lastCalculatedOneWayKm = kmSolaAndata
                 val multiplier = if (_isAndataRitorno.value) 2 else 1
                 _kmTotali.value = kmSolaAndata * multiplier
                 _errorMessage.value = null
 
             } catch (e: Exception) {
-                // Mostriamo l'errore reale (es. "REQUEST_DENIED") per capire il problema
-                _errorMessage.value = "${e.message}"
+                _errorMessage.value = "Errore Maps: ${e.message}"
             } finally {
                 _isLoadingMaps.value = false
             }
         }
     }
 
-    // Funzione specifica per Google Maps (Parsing JSON)
     private fun fetchGoogleDistance(origin: String, destination: String): Int {
-        try {
-            val originEnc = URLEncoder.encode(origin, "UTF-8")
-            val destEnc = URLEncoder.encode(destination, "UTF-8")
+        val originEnc = URLEncoder.encode(origin, "UTF-8")
+        val destEnc = URLEncoder.encode(destination, "UTF-8")
 
-            // URL ufficiale Google Directions
-            val url = "https://maps.googleapis.com/maps/api/directions/json?origin=$originEnc&destination=$destEnc&key=$MAPS_API_KEY"
+        val url = "https://maps.googleapis.com/maps/api/directions/json?origin=$originEnc&destination=$destEnc&key=$MAPS_API_KEY"
 
-            val jsonResponse = URL(url).readText()
-            val jsonObject = JSONObject(jsonResponse)
+        val jsonResponse = URL(url).readText()
+        val jsonObject = JSONObject(jsonResponse)
 
-            // Controllo dello Status di Google
-            val status = jsonObject.getString("status")
-            if (status != "OK") {
-                Log.e("CarKarmaMaps", "Google API Error: $status")
-                val msg = when(status) {
-                    "REQUEST_DENIED" -> "Accesso negato. Controlla che la chiave sia attiva, il Billing abilitato e la 'Directions API' accesa."
-                    "OVER_QUERY_LIMIT" -> "Quota superata o fatturazione non attiva su Google Cloud."
-                    "ZERO_RESULTS" -> "Nessun percorso trovato tra questi indirizzi."
-                    else -> "Errore Google Maps: $status"
-                }
-                throw Exception(msg)
+        val status = jsonObject.getString("status")
+        if (status != "OK") {
+            Log.e("CarKarmaMaps", "Google API Error: $status")
+            val msg = when(status) {
+                "REQUEST_DENIED" -> "Accesso negato. Controlla Billing e API Key."
+                "OVER_QUERY_LIMIT" -> "Quota superata."
+                "ZERO_RESULTS" -> "Percorso non trovato."
+                else -> "Errore Google: $status"
             }
-
-            // Parsing della risposta
-            val routes = jsonObject.getJSONArray("routes")
-            if (routes.length() > 0) {
-                val legs = routes.getJSONObject(0).getJSONArray("legs")
-                if (legs.length() > 0) {
-                    val distance = legs.getJSONObject(0).getJSONObject("distance")
-                    val meters = distance.getInt("value")
-                    // Convertiamo metri in km (arrotondamento per eccesso)
-                    return ((meters + 500) / 1000)
-                }
-            }
-            throw Exception("Risposta vuota da Google Maps.")
-        } catch (e: Exception) {
-            // Rilanciamo l'eccezione per farla catturare sopra
-            throw e
+            throw Exception(msg)
         }
+
+        val routes = jsonObject.getJSONArray("routes")
+        if (routes.length() > 0) {
+            val legs = routes.getJSONObject(0).getJSONArray("legs")
+            if (legs.length() > 0) {
+                val distance = legs.getJSONObject(0).getJSONObject("distance")
+                val meters = distance.getInt("value")
+                return ((meters + 500) / 1000) // Arrotondamento
+            }
+        }
+        throw Exception("Risposta vuota da Google Maps.")
     }
 
-    // --- ALGORITMO SUGGERIMENTO ---
+    // --- ALGORITMO SUGGERIMENTO (Con Prezzi Reali) ---
     fun calcolaSuggerimento() {
         val amici = _amiciDelGruppo.value
         val part = _partecipantiSelezionati.value
@@ -235,20 +210,29 @@ class UscitaViewModel(
             _suggerimentoGuidatore.value = "Seleziona almeno 2 partecipanti."
             return
         }
-        val res = calcoloUseCase.calcolaChiGuida(amici, part)
-        if (res.isNotEmpty()) {
-            val sb = StringBuilder("🚗 Consigliati:\n")
-            res.forEach { (a, k) -> sb.append("- ${a.nome} (Karma: ${String.format(Locale.US, "%.1f", k)})\n") }
-            _suggerimentoGuidatore.value = sb.toString()
-        } else {
-            _suggerimentoGuidatore.value = "Nessuna soluzione trovata. Controlla i posti auto."
+
+        viewModelScope.launch {
+            // Scarichiamo i prezzi aggiornati dal Ministero
+            val prezzi = carburanteRepository.getPrezziAggiornati()
+
+            // Passiamo i prezzi all'algoritmo
+            val res = calcoloUseCase.calcolaChiGuida(amici, part, prezzi)
+
+            if (res.isNotEmpty()) {
+                val sb = StringBuilder("🚗 Consigliati:\n")
+                // Nota: Il "Karma" qui visualizzato è il bilancio, che è un numero double
+                res.forEach { (a, k) -> sb.append("- ${a.nome} (Bilancio: ${String.format(Locale.US, "%.1f", k)})\n") }
+                _suggerimentoGuidatore.value = sb.toString()
+            } else {
+                _suggerimentoGuidatore.value = "Nessuna soluzione trovata."
+            }
         }
     }
 
     fun resetSuggerimento() { _suggerimentoGuidatore.value = null }
     fun clearError() { _errorMessage.value = null }
 
-    // --- SALVATAGGIO & ROLLBACK ---
+    // --- SALVATAGGIO (Con Calcolo Economico) ---
     fun salvaUscita(onSalvato: () -> Unit) {
         if (_partecipantiSelezionati.value.size < 2) {
             _errorMessage.value = "Servono almeno 2 partecipanti."
@@ -268,52 +252,66 @@ class UscitaViewModel(
                 andataRitorno = _isAndataRitorno.value
             )
 
+            // Scarichiamo i prezzi una volta per tutte le operazioni di salvataggio
+            val prezzi = carburanteRepository.getPrezziAggiornati()
+
             if (currentUscitaId.isEmpty()) {
                 // CREAZIONE
                 uscitaRepository.aggiungiUscita(nuovaUscita)
-                // Applica le nuove statistiche
-                applicaStatistiche(nuovaUscita)
+                applicaStatistiche(nuovaUscita, prezzi)
             } else {
                 // MODIFICA
-                // 1. Annulla l'effetto dell'uscita precedente (sottrai km e presenze)
-                originalUscita?.let { revertStatistiche(it) }
-
-                // 2. Salva la nuova versione
+                originalUscita?.let { revertStatistiche(it, prezzi) }
                 uscitaRepository.aggiornaUscita(nuovaUscita)
-
-                // 3. Applica le nuove statistiche
-                applicaStatistiche(nuovaUscita)
+                applicaStatistiche(nuovaUscita, prezzi)
             }
             onSalvato()
         }
     }
 
-    // Aggiunge km e presenze (Delta POSITIVI)
-    private fun applicaStatistiche(u: Uscita) {
+    private suspend fun applicaStatistiche(u: Uscita, prezzi: Map<String, Double>) {
         u.partecipantiIds.forEach { id ->
+            val amico = _amiciDelGruppo.value.find { it.id == id }
             val haGuidato = u.guidatoriIds.contains(id)
-            val km = if (haGuidato) u.kmTotali else 0
-            // +1 uscita, +1 guida, +km
+            val kmFisici = if (haGuidato) u.kmTotali else 0
+
+            // Calcolo Karma Pesato
+            var puntiKarmaGuadagnati = 0.0
+            if (haGuidato && amico != null) {
+                // Fattore basato su Consumo Auto e Prezzo Carburante
+                val fattore = calcoloUseCase.calcolaFattoreAttuale(amico, prezzi)
+                puntiKarmaGuadagnati = kmFisici * fattore
+            }
+
             gruppoRepository.aggiornaStatisticheMembro(
                 currentGruppoId, id,
                 deltaUscite = 1,
                 deltaGuide = if (haGuidato) 1 else 0,
-                deltaKm = km
+                deltaKm = kmFisici,
+                deltaKarma = puntiKarmaGuadagnati // Sommiamo i punti pesati
             )
         }
     }
 
-    // Rimuove km e presenze (Delta NEGATIVI)
-    private fun revertStatistiche(u: Uscita) {
+    private suspend fun revertStatistiche(u: Uscita, prezzi: Map<String, Double>) {
         u.partecipantiIds.forEach { id ->
+            val amico = _amiciDelGruppo.value.find { it.id == id }
             val haGuidato = u.guidatoriIds.contains(id)
-            val km = if (haGuidato) u.kmTotali else 0
-            // -1 uscita, -1 guida, -km
+            val kmFisici = if (haGuidato) u.kmTotali else 0
+
+            var puntiKarmaDaTogliere = 0.0
+            if (haGuidato && amico != null) {
+                // Nota: Usiamo prezzi e auto attuali per il revert (miglior approssimazione possibile)
+                val fattore = calcoloUseCase.calcolaFattoreAttuale(amico, prezzi)
+                puntiKarmaDaTogliere = kmFisici * fattore
+            }
+
             gruppoRepository.aggiornaStatisticheMembro(
                 currentGruppoId, id,
                 deltaUscite = -1,
                 deltaGuide = if (haGuidato) -1 else 0,
-                deltaKm = -km
+                deltaKm = -kmFisici,
+                deltaKarma = -puntiKarmaDaTogliere
             )
         }
     }
@@ -321,8 +319,8 @@ class UscitaViewModel(
     fun eliminaUscita(onEliminato: () -> Unit) {
         viewModelScope.launch {
             if (currentUscitaId.isNotEmpty()) {
-                // Se eliminiamo l'uscita, dobbiamo togliere le sue statistiche dal conteggio!
-                originalUscita?.let { revertStatistiche(it) }
+                val prezzi = carburanteRepository.getPrezziAggiornati()
+                originalUscita?.let { revertStatistiche(it, prezzi) }
                 uscitaRepository.eliminaUscita(currentGruppoId, currentUscitaId)
             }
             onEliminato()

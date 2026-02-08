@@ -162,13 +162,11 @@ fun CarKarmaNavHost(
             val user = googleAuthClient.getSignedInUser()
 
             if (user == null) {
-                // Se non è loggato, mandalo al login
                 LaunchedEffect(Unit) {
                     Toast.makeText(context, "Accedi per unirti al gruppo", Toast.LENGTH_SHORT).show()
                     navController.navigate("login")
                 }
             } else {
-                // Proviamo ad unirci al gruppo
                 var loading by remember { mutableStateOf(true) }
                 val scope = rememberCoroutineScope()
 
@@ -176,7 +174,6 @@ fun CarKarmaNavHost(
                     AppContainer.gruppoRepository.uniscitiAlGruppo(groupId) { successo ->
                         if (successo) {
                             scope.launch {
-                                // Importiamo gli amici del gruppo nella rubrica personale
                                 val membriDelGruppo = AppContainer.gruppoRepository.getMembriSnapshot(groupId)
                                 if (membriDelGruppo.isNotEmpty()) {
                                     AppContainer.amicoRepository.importaAmici(membriDelGruppo)
@@ -211,7 +208,7 @@ fun CarKarmaNavHost(
             GruppoScreen(navController, it.arguments?.getString("gruppoId") ?: "", vm)
         }
 
-        // --- STATISTICHE GRUPPO (NUOVO) ---
+        // --- STATISTICHE GRUPPO ---
         composable(
             route = "statistiche/{gruppoId}",
             arguments = listOf(navArgument("gruppoId") { type = NavType.StringType })
@@ -234,7 +231,13 @@ fun CarKarmaNavHost(
 
         // --- USCITA (NUOVA O MODIFICA) ---
         composable("uscita/{gruppoId}?uscitaId={uscitaId}", arguments = listOf(navArgument("gruppoId") { type = NavType.StringType }, navArgument("uscitaId") { type = NavType.StringType; defaultValue = "" })) {
-            val vm: UscitaViewModel = viewModel(factory = UscitaViewModelFactory(AppContainer.uscitaRepository, AppContainer.gruppoRepository))
+            val vm: UscitaViewModel = viewModel(
+                factory = UscitaViewModelFactory(
+                    AppContainer.uscitaRepository,
+                    AppContainer.gruppoRepository,
+                    AppContainer.carburanteRepository // <--- FIX: Passiamo il repo carburante qui!
+                )
+            )
             UscitaScreen(navController, it.arguments?.getString("gruppoId") ?: "", it.arguments?.getString("uscitaId") ?: "", vm)
         }
 

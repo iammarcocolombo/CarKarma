@@ -9,23 +9,24 @@ import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.ktx.storage
 
 object AppContainer {
-    // Inizializziamo Firestore e Auth
+    // Inizializziamo i servizi Firebase
     private val db: FirebaseFirestore = Firebase.firestore
     private val auth: FirebaseAuth = Firebase.auth
-
-    // NUOVO: Inizializziamo lo Storage per le immagini (Foto profilo gruppi)
     private val storage: FirebaseStorage = Firebase.storage
 
     // 1. Creiamo i repository base
     val amicoRepository = AmicoRepository(db, auth)
     val uscitaRepository = UscitaRepository(db, auth)
 
-    // 2. Creiamo GruppoRepository
-    // GLI PASSIAMO 'storage' PER POTER CARICARE LE FOTO
+    // 2. Repository per i prezzi carburante (Nuovo)
+    val carburanteRepository = CarburanteRepository(db)
+
+    // 3. Creiamo GruppoRepository
+    // Questo dipende dagli altri e dallo storage per le immagini
     val gruppoRepository = GruppoRepository(
         db,
         auth,
-        storage, // <--- Parametro aggiunto
+        storage,
         amicoRepository,
         uscitaRepository
     )
