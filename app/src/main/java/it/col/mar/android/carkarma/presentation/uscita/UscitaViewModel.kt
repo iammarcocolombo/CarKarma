@@ -23,12 +23,10 @@ import java.util.Locale
 class UscitaViewModel(
     private val uscitaRepository: UscitaRepository,
     private val gruppoRepository: GruppoRepository,
-    private val carburanteRepository: CarburanteRepository // Iniezione del repo prezzi
+    private val carburanteRepository: CarburanteRepository
 ) : ViewModel() {
 
-    // USIAMO LA CHIAVE DI GOOGLE MAPS
     private val MAPS_API_KEY = Config.GOOGLE_MAPS_KEY
-
     private val calcoloUseCase = CalcoloTurnoUseCase()
 
     private var currentUscitaId: String = ""
@@ -134,7 +132,6 @@ class UscitaViewModel(
         lastCalculatedOneWayKm = null
     }
 
-    // --- CALCOLO DISTANZA (GOOGLE MAPS) ---
     fun calcolaDistanzaDaMaps() {
         val start = _indirizzoPartenza.value
         val end = _indirizzoDestinazione.value
@@ -196,13 +193,12 @@ class UscitaViewModel(
             if (legs.length() > 0) {
                 val distance = legs.getJSONObject(0).getJSONObject("distance")
                 val meters = distance.getInt("value")
-                return ((meters + 500) / 1000) // Arrotondamento
+                return ((meters + 500) / 1000)
             }
         }
         throw Exception("Risposta vuota da Google Maps.")
     }
 
-    // --- ALGORITMO SUGGERIMENTO (Con Prezzi Reali) ---
     fun calcolaSuggerimento() {
         val amici = _amiciDelGruppo.value
         val part = _partecipantiSelezionati.value
@@ -212,16 +208,15 @@ class UscitaViewModel(
         }
 
         viewModelScope.launch {
-            // Scarichiamo i prezzi aggiornati dal Ministero
-            val prezzi = carburanteRepository.getPrezziAggiornati()
-
-            // Passiamo i prezzi all'algoritmo
-            val res = calcoloUseCase.calcolaChiGuida(amici, part, prezzi)
+            val res = calcoloUseCase.calcolaChiGuida(amici, part)
 
             if (res.isNotEmpty()) {
                 val sb = StringBuilder("🚗 Consigliati:\n")
-                // Nota: Il "Karma" qui visualizzato è il bilancio, che è un numero double
-                res.forEach { (a, k) -> sb.append("- ${a.nome} (Bilancio: ${String.format(Locale.US, "%.1f", k)})\n") }
+                // Il Bilancio ora rappresenta "Euro di credito/debito"
+                res.forEach { (a, bilancioEuro) ->
+                    val segno = if (bilancioEuro > 0) "+" else ""
+                    sb.append("- ${a.nome} (Bilancio: $segno${String.format(Locale.US, "%.2f", bilancioEuro)}€)\n")
+                }
                 _suggerimentoGuidatore.value = sb.toString()
             } else {
                 _suggerimentoGuidatore.value = "Nessuna soluzione trovata."
@@ -232,7 +227,6 @@ class UscitaViewModel(
     fun resetSuggerimento() { _suggerimentoGuidatore.value = null }
     fun clearError() { _errorMessage.value = null }
 
-    // --- SALVATAGGIO (Con Calcolo Economico) ---
     fun salvaUscita(onSalvato: () -> Unit) {
         if (_partecipantiSelezionati.value.size < 2) {
             _errorMessage.value = "Servono almeno 2 partecipanti."
@@ -252,15 +246,12 @@ class UscitaViewModel(
                 andataRitorno = _isAndataRitorno.value
             )
 
-            // Scarichiamo i prezzi una volta per tutte le operazioni di salvataggio
             val prezzi = carburanteRepository.getPrezziAggiornati()
 
             if (currentUscitaId.isEmpty()) {
-                // CREAZIONE
                 uscitaRepository.aggiungiUscita(nuovaUscita)
                 applicaStatistiche(nuovaUscita, prezzi)
             } else {
-                // MODIFICA
                 originalUscita?.let { revertStatistiche(it, prezzi) }
                 uscitaRepository.aggiornaUscita(nuovaUscita)
                 applicaStatistiche(nuovaUscita, prezzi)
@@ -275,12 +266,11 @@ class UscitaViewModel(
             val haGuidato = u.guidatoriIds.contains(id)
             val kmFisici = if (haGuidato) u.kmTotali else 0
 
-            // Calcolo Karma Pesato
-            var puntiKarmaGuadagnati = 0.0
+            // Il Karma ora è letteralmente il costo in EURO del viaggio
+            var euroSpesi = 0.0
             if (haGuidato && amico != null) {
-                // Fattore basato su Consumo Auto e Prezzo Carburante
-                val fattore = calcoloUseCase.calcolaFattoreAttuale(amico, prezzi)
-                puntiKarmaGuadagnati = kmFisici * fattore
+                val costoKm = calcoloUseCase.calcolaCostoChilometrico(amico, prezzi)
+                euroSpesi = kmFisici * costoKm
             }
 
             gruppoRepository.aggiornaStatisticheMembro(
@@ -288,7 +278,7 @@ class UscitaViewModel(
                 deltaUscite = 1,
                 deltaGuide = if (haGuidato) 1 else 0,
                 deltaKm = kmFisici,
-                deltaKarma = puntiKarmaGuadagnati // Sommiamo i punti pesati
+                deltaKarma = euroSpesi // Aggiungiamo gli Euro spesi al salvadanaio
             )
         }
     }
@@ -299,11 +289,10 @@ class UscitaViewModel(
             val haGuidato = u.guidatoriIds.contains(id)
             val kmFisici = if (haGuidato) u.kmTotali else 0
 
-            var puntiKarmaDaTogliere = 0.0
+            var euroDaTogliere = 0.0
             if (haGuidato && amico != null) {
-                // Nota: Usiamo prezzi e auto attuali per il revert (miglior approssimazione possibile)
-                val fattore = calcoloUseCase.calcolaFattoreAttuale(amico, prezzi)
-                puntiKarmaDaTogliere = kmFisici * fattore
+                val costoKm = calcoloUseCase.calcolaCostoChilometrico(amico, prezzi)
+                euroDaTogliere = kmFisici * costoKm
             }
 
             gruppoRepository.aggiornaStatisticheMembro(
@@ -311,7 +300,7 @@ class UscitaViewModel(
                 deltaUscite = -1,
                 deltaGuide = if (haGuidato) -1 else 0,
                 deltaKm = -kmFisici,
-                deltaKarma = -puntiKarmaDaTogliere
+                deltaKarma = -euroDaTogliere
             )
         }
     }

@@ -5,55 +5,64 @@ import kotlin.math.max
 
 class CalcoloTurnoUseCase {
 
-    // CONSUMO STANDARD DI RIFERIMENTO (Litri per 100km)
-    // 7.0 L/100km corrisponde circa ai vecchi 14 km/l.
-    private val STANDARD_CONSUMO = 7.0
-
-    // Prezzo standard se l'API fallisce
-    private val STANDARD_PREZZO = 1.80
+    companion object {
+        // Standard abbassato a 6.0 L/100km (più realistico per le auto moderne)
+        private const val STANDARD_CONSUMO = 6.0
+        private const val STANDARD_PREZZO = 1.80 // Euro
+    }
 
     /**
-     * Calcola chi deve guidare basandosi sul Karma ACCUMULATO nel tempo.
-     *
-     * @param prezziCarburante Mappa con i prezzi (es. "Benzina" -> 1.859).
-     * È questo il parametro che mancava e causava l'errore!
+     * QUERY: Calcola chi deve guidare basandosi sul Bilancio Economico (Euro).
+     * OPZIONE A: I guidatori non pagano il debito per quel viaggio, solo i passeggeri.
      */
     fun calcolaChiGuida(
         membriGruppo: List<Amico>,
-        presentiIds: Set<String>,
-        prezziCarburante: Map<String, Double> = emptyMap()
+        presentiIds: Set<String>
     ): List<Pair<Amico, Double>> {
 
         val presenti = membriGruppo.filter { presentiIds.contains(it.id) }
         val numeroPersone = presenti.size
 
-        if (numeroPersone < 2) return emptyList()
+        if (numeroPersone == 0) return emptyList()
+        if (numeroPersone == 1) return listOf(presenti.first() to 0.0)
 
-        // 1. Recuperiamo il Karma Storico
-        val mappaKarma = presenti.associate { amico ->
+        // 1. Recuperiamo il Karma (che d'ora in poi rappresenta gli EURO spesi)
+        val mappaKarmaTotale = membriGruppo.associate { amico ->
             val valoreKarmaReale = if (amico.karma != 0.0) amico.karma else amico.km.toDouble()
             amico.id to valoreKarmaReale
         }
 
-        // 2. Calcolo Media del Gruppo
-        val totaleKarmaGruppo = mappaKarma.values.sum()
-        val presenzeTotaliGruppo = membriGruppo.sumOf { it.uscite }
+        val totaleKarmaGruppo = mappaKarmaTotale.values.sum()
 
-        val debitoPerPresenza = if (presenzeTotaliGruppo > 0) {
-            totaleKarmaGruppo / presenzeTotaliGruppo
+        // 2. Calcolo dei Passeggeri Totali (Opzione A)
+        // Invece di dividere il costo per tutte le presenze, lo dividiamo solo per le volte
+        // in cui qualcuno si è seduto sul sedile del passeggero.
+        val presenzeTotaliGruppo = membriGruppo.sumOf { it.uscite }
+        val guideTotaliGruppo = membriGruppo.sumOf { it.guide }
+        val passeggeriTotali = presenzeTotaliGruppo - guideTotaliGruppo
+
+        // Quanto costa mediamente occupare un sedile da passeggero
+        val costoPerPasseggero = if (passeggeriTotali > 0) {
+            totaleKarmaGruppo / passeggeriTotali
         } else {
             0.0
         }
 
         // 3. Classifica Bilancio
+        // Bilancio = (Miei Euro Spesi per il gruppo) - (Mio debito accumulato scroccando passaggi)
         val classificaBase = presenti.map { amico ->
-            val mioKarma = mappaKarma[amico.id] ?: 0.0
-            val mioDebito = amico.uscite * debitoPerPresenza
-            val bilancio = mioKarma - mioDebito
-            amico to bilancio
-        }.sortedBy { it.second }
+            val mioKarma = mappaKarmaTotale[amico.id] ?: 0.0
 
-        // 4. Selezione Guidatori
+            // Calcolo quante volte ha fatto il passeggero
+            val voltePasseggero = max(0, amico.uscite - amico.guide)
+            val mioDebito = voltePasseggero * costoPerPasseggero
+
+            val bilancio = mioKarma - mioDebito
+
+            amico to bilancio
+        }.sortedBy { it.second } // Ordinati dal più in debito (deve guidare) al più in credito
+
+        // --- FASE DECISIONALE DINAMICA ---
         val candidatiUnici = classificaBase.filter { (amico, _) ->
             amico.postiAuto >= numeroPersone
         }
@@ -75,21 +84,18 @@ class CalcoloTurnoUseCase {
     }
 
     /**
-     * Calcola il "Moltiplicatore" per il viaggio di OGGI.
-     * Serve al ViewModel per sapere quanti punti aggiungere.
+     * COMMAND: Calcola il costo esatto in EURO per 1 solo Kilometro.
+     * Formula: (Consumo / 100) * Prezzo
      */
-    fun calcolaFattoreAttuale(amico: Amico, prezzi: Map<String, Double>): Double {
-        if (amico.consumoMedio <= 0.0) return 1.0
+    fun calcolaCostoChilometrico(amico: Amico, prezzi: Map<String, Double>): Double {
+        val consumoUtente = if (amico.consumoMedio > 0.0) amico.consumoMedio else STANDARD_CONSUMO
 
-        val consumoUtente = amico.consumoMedio // Litri per 100km
+        val prezzoAlLitro = prezzi.entries
+            .firstOrNull { it.key.equals(amico.tipoCarburante, ignoreCase = true) }
+            ?.value ?: STANDARD_PREZZO
 
-        // Fattore Consumo: Più alto è (più beve l'auto), più punti meriti
-        val fattoreConsumo = consumoUtente / STANDARD_CONSUMO
-
-        // Fattore Prezzo: Più costa al litro, più punti meriti
-        val prezzoAlLitro = prezzi[amico.tipoCarburante] ?: STANDARD_PREZZO
-        val fattorePrezzo = prezzoAlLitro / STANDARD_PREZZO
-
-        return fattoreConsumo * fattorePrezzo
+        // Esempio: 6.0 L/100km -> 0.06 Litri al km.
+        // 0.06 * 1.80€ = 0.108 Euro al km.
+        return (consumoUtente / 100.0) * prezzoAlLitro
     }
 }
