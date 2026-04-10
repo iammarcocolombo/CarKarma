@@ -1,6 +1,5 @@
 package it.col.mar.android.carkarma.data.database
 
-import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
