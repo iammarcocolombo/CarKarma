@@ -4,20 +4,23 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.toObjects
 import it.col.mar.android.carkarma.data.model.Amico
+import it.col.mar.android.carkarma.domain.repository.AmicoRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
-class AmicoRepository(
+class AmicoRepositoryImpl(
     private val db: FirebaseFirestore,
     private val auth: FirebaseAuth
-) {
+) : AmicoRepository { // Implementa l'interfaccia definita nel dominio
+
     private val _amici = MutableStateFlow<List<Amico>>(emptyList())
-    val amici: StateFlow<List<Amico>> = _amici.asStateFlow()
+    override val amici: StateFlow<List<Amico>> = _amici.asStateFlow()
 
     init {
+        // Ascolto in tempo reale dei cambiamenti su Firestore
         auth.addAuthStateListener { firebaseAuth ->
             val userId = firebaseAuth.currentUser?.uid
             if (userId != null) {
@@ -34,30 +37,29 @@ class AmicoRepository(
         }
     }
 
-    fun getTuttiGliAmici(): List<Amico> = _amici.value
+    override fun getTuttiGliAmici(): List<Amico> = _amici.value
 
-    fun getAmicoPerId(id: String): Amico? {
+    override fun getAmicoPerId(id: String): Amico? {
         return _amici.value.find { it.id == id }
     }
 
-    // MODIFICA: Ora è 'suspend' e aspetta (.await())
-    suspend fun aggiungiAmico(amico: Amico) {
+    override suspend fun aggiungiAmico(amico: Amico) {
         val userId = auth.currentUser?.uid ?: return
 
-        val idFinale = if (amico.id.isEmpty()) UUID.randomUUID().toString() else amico.id
+        val idFinale = amico.id.ifEmpty { UUID.randomUUID().toString() }
         val amicoDaSalvare = amico.copy(id = idFinale)
 
         try {
             db.collection("users").document(userId).collection("amici")
                 .document(idFinale)
                 .set(amicoDaSalvare)
-                .await() // Aspetta che Firebase confermi!
+                .await()
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    fun importaAmici(listaAmici: List<Amico>) {
+    override fun importaAmici(listaAmici: List<Amico>) {
         val userId = auth.currentUser?.uid ?: return
         val collectionRef = db.collection("users").document(userId).collection("amici")
         val batch = db.batch()
@@ -70,13 +72,13 @@ class AmicoRepository(
         batch.commit()
     }
 
-    suspend fun rimuoviAmico(amicoId: String) {
+    override suspend fun rimuoviAmico(amicoId: String) {
         val userId = auth.currentUser?.uid ?: return
         try {
             db.collection("users").document(userId).collection("amici")
                 .document(amicoId)
                 .delete()
-                .await() // Aspetta la cancellazione
+                .await()
         } catch (e: Exception) {
             e.printStackTrace()
         }

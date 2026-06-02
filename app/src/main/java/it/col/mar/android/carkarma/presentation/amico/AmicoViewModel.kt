@@ -2,8 +2,8 @@ package it.col.mar.android.carkarma.presentation.amico
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import it.col.mar.android.carkarma.data.database.AmicoRepository
-import it.col.mar.android.carkarma.data.database.GruppoRepository
+import it.col.mar.android.carkarma.domain.repository.AmicoRepository // CORRETTO
+import it.col.mar.android.carkarma.domain.repository.GruppoRepository // CORRETTO
 import it.col.mar.android.carkarma.data.model.Amico
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,11 +22,10 @@ class AmicoViewModel(
     private val _postiAuto = MutableStateFlow("5")
     val postiAuto: StateFlow<String> = _postiAuto
 
-    // NUOVI STATI PER AUTO
     private val _tipoCarburante = MutableStateFlow("Benzina")
     val tipoCarburante: StateFlow<String> = _tipoCarburante
 
-    private val _consumoMedio = MutableStateFlow("") // Stringa per gestire l'input (es. "6,5")
+    private val _consumoMedio = MutableStateFlow("")
     val consumoMedio: StateFlow<String> = _consumoMedio
 
     private var currentAmicoId: String = ""
@@ -38,7 +37,6 @@ class AmicoViewModel(
 
         viewModelScope.launch {
             if (id.isNotEmpty()) {
-                // Recuperiamo l'amico dal posto giusto (Gruppo o Rubrica)
                 val amico = if (gruppoId.isNotEmpty()) {
                     gruppoRepository.getMembro(gruppoId, id)
                 } else {
@@ -49,11 +47,9 @@ class AmicoViewModel(
                     _nome.value = it.nome
                     _postiAuto.value = it.postiAuto.toString()
                     _tipoCarburante.value = it.tipoCarburante
-                    // Convertiamo il double in stringa solo se ha senso
                     _consumoMedio.value = if (it.consumoMedio > 0.0) it.consumoMedio.toString() else ""
                 }
             } else {
-                // Reset per nuovo inserimento
                 _nome.value = ""
                 _postiAuto.value = "5"
                 _tipoCarburante.value = "Benzina"
@@ -73,7 +69,6 @@ class AmicoViewModel(
     fun onTipoCarburanteChange(t: String) { _tipoCarburante.value = t }
 
     fun onConsumoChange(c: String) {
-        // Accettiamo solo cifre, punto e virgola per evitare crash durante l'input
         if (c.all { it.isDigit() || it == '.' || it == ',' }) {
             _consumoMedio.value = c
         }
@@ -81,47 +76,36 @@ class AmicoViewModel(
 
     fun salvaAmico(onFinito: () -> Unit) {
         val posti = _postiAuto.value.toIntOrNull() ?: 5
-
-        // Conversione sicura: sostituisce la virgola italiana con il punto decimale
         val consumo = _consumoMedio.value.replace(',', '.').toDoubleOrNull() ?: 0.0
 
         viewModelScope.launch {
             try {
                 if (currentGruppoId.isNotEmpty()) {
-                    // --- MODIFICA MEMBRO DEL GRUPPO ---
                     if (currentAmicoId.isNotEmpty()) {
                         val membroEsistente = gruppoRepository.getMembro(currentGruppoId, currentAmicoId)
                         if (membroEsistente != null) {
-                            // Creiamo l'oggetto aggiornato mantenendo le statistiche (uscite, guide, km)
-                            // ma aggiornando i dati anagrafici e dell'auto
                             val amicoAggiornato = membroEsistente.copy(
                                 nome = _nome.value,
                                 postiAuto = posti,
                                 tipoCarburante = _tipoCarburante.value,
                                 consumoMedio = consumo
                             )
-                            // Usiamo la funzione specifica di update per non perdere i dati statistici
                             gruppoRepository.aggiornaAnagraficaMembro(currentGruppoId, amicoAggiornato)
                         }
                     }
                 } else {
-                    // --- MODIFICA/CREAZIONE RUBRICA GLOBALE ---
                     val amicoBase = if (currentAmicoId.isNotEmpty()) {
                         amicoRepository.getAmicoPerId(currentAmicoId)
                     } else null
 
-                    val amicoDaSalvare = if (amicoBase != null) {
-                        // Modifica esistente
-                        amicoBase.copy(
-                            nome = _nome.value,
-                            postiAuto = posti,
-                            tipoCarburante = _tipoCarburante.value,
-                            consumoMedio = consumo
-                        )
-                    } else {
-                        // Nuovo amico
-                        Amico(
-                            id = if(currentAmicoId.isNotEmpty()) currentAmicoId else UUID.randomUUID().toString(),
+                    val amicoDaSalvare = amicoBase?.copy(
+                        nome = _nome.value,
+                        postiAuto = posti,
+                        tipoCarburante = _tipoCarburante.value,
+                        consumoMedio = consumo
+                    )
+                        ?: Amico(
+                            id = currentAmicoId.ifEmpty { UUID.randomUUID().toString() },
                             nome = _nome.value,
                             postiAuto = posti,
                             tipoCarburante = _tipoCarburante.value,
@@ -130,12 +114,10 @@ class AmicoViewModel(
                             guide = 0,
                             km = 0
                         )
-                    }
-
                     amicoRepository.aggiungiAmico(amicoDaSalvare)
                 }
 
-                delay(200) // Piccolo ritardo per dare tempo a Firestore
+                delay(200)
                 onFinito()
             } catch (e: Exception) {
                 e.printStackTrace()

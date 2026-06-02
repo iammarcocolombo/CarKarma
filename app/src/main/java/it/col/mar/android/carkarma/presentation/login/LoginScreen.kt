@@ -27,6 +27,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import it.col.mar.android.carkarma.R
 
+/**
+ * Schermata di Login dell'applicazione CarKarma.
+ * Gestisce l'accesso e la registrazione sia con credenziali classiche (Email/Password)
+ * sia in modalità federata tramite Google OneTap.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     state: LoginState,
@@ -37,7 +43,7 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
-    // Mostra errori (Toast) se qualcosa va storto (es. password errata)
+    // Mostra errori (Toast) se qualcosa va storto (es. password errata o formato non valido)
     LaunchedEffect(key1 = state.signInError) {
         state.signInError?.let { error ->
             Toast.makeText(context, error, Toast.LENGTH_LONG).show()
@@ -48,7 +54,7 @@ fun LoginScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
-            .verticalScroll(rememberScrollState()), // Permette di scrollare se la tastiera copre i campi
+            .verticalScroll(rememberScrollState()), // Permette di scorrere il layout se la tastiera copre i campi di input
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -145,11 +151,11 @@ fun LoginScreen(
                 containerColor = Color.White, // Sfondo Bianco classico Google
                 contentColor = Color.Black    // Testo Nero
             ),
-            border = BorderStroke(1.dp, Color.LightGray), // Bordino sottile
+            border = BorderStroke(1.dp, Color.LightGray), // Bordino sottile di separazione per contrasto
             elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Immagine ufficiale (Assicurati di avere ic_google_logo in res/drawable)
+                // Immagine vettoriale del logo Google ufficiale (ic_google_logo in drawables)
                 Image(
                     painter = painterResource(id = R.drawable.ic_google_logo),
                     contentDescription = "Google Logo",

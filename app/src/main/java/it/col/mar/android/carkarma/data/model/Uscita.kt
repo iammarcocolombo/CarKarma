@@ -10,6 +10,5 @@ data class Uscita(
     val partenza: String = "",
     val destinazione: String = "",
     val andataRitorno: Boolean = true,
-    // AGGIUNTO: Timestamp per ordinare (default: adesso)
     val data: Long = System.currentTimeMillis()
 )

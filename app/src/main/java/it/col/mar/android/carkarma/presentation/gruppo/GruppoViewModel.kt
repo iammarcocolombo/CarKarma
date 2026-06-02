@@ -2,9 +2,8 @@ package it.col.mar.android.carkarma.presentation.gruppo
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import it.col.mar.android.carkarma.data.database.AmicoRepository
-import it.col.mar.android.carkarma.data.database.GruppoRepository
-import it.col.mar.android.carkarma.data.database.UscitaRepository
+import it.col.mar.android.carkarma.domain.repository.GruppoRepository
+import it.col.mar.android.carkarma.domain.repository.UscitaRepository
 import it.col.mar.android.carkarma.data.model.Gruppo
 import it.col.mar.android.carkarma.data.model.Uscita
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +11,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class GruppoViewModel(
-    private val amicoRepository: AmicoRepository,
     private val gruppoRepository: GruppoRepository,
     private val uscitaRepository: UscitaRepository
 ) : ViewModel() {
@@ -36,7 +34,6 @@ class GruppoViewModel(
                 return@launch
             }
 
-            // 1. Carica i dettagli del Gruppo
             val g = gruppoRepository.getGruppoPerId(gruppoId)
             if (g == null) {
                 _errorMessage.value = "Gruppo non trovato"
@@ -45,8 +42,6 @@ class GruppoViewModel(
                 _errorMessage.value = null
                 _gruppo.value = g
 
-                // 2. Ascolta le uscite di questo gruppo in tempo reale
-                // (Nota: usa getUsciteDelGruppo che abbiamo aggiunto nel UscitaRepository)
                 uscitaRepository.getUsciteDelGruppo(gruppoId).collect { listaUscite ->
                     _uscite.value = listaUscite
                 }
@@ -54,7 +49,6 @@ class GruppoViewModel(
         }
     }
 
-    // Funzione per dissociarsi dal gruppo (rimuove il proprio ID dalla lista utenti)
     fun lasciaGruppo(onLasciato: () -> Unit) {
         if (currentGruppoId.isNotEmpty()) {
             viewModelScope.launch {

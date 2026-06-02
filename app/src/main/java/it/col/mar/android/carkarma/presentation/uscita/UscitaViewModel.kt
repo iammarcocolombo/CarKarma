@@ -3,12 +3,12 @@ package it.col.mar.android.carkarma.presentation.uscita
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import it.col.mar.android.carkarma.data.database.CarburanteRepository
-import it.col.mar.android.carkarma.data.database.GruppoRepository
-import it.col.mar.android.carkarma.data.database.UscitaRepository
 import it.col.mar.android.carkarma.data.model.Amico
 import it.col.mar.android.carkarma.data.model.Uscita
 import it.col.mar.android.carkarma.domain.CalcoloTurnoUseCase
+import it.col.mar.android.carkarma.domain.repository.CarburanteRepository
+import it.col.mar.android.carkarma.domain.repository.GruppoRepository
+import it.col.mar.android.carkarma.domain.repository.UscitaRepository
 import it.col.mar.android.carkarma.util.Config
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,13 +20,17 @@ import java.net.URL
 import java.net.URLEncoder
 import java.util.Locale
 
+/**
+ * ViewModel per la gestione delle Uscite (creazione e modifica).
+ * Utilizza unicamente le interfacce definite nel Domain Layer per l'accesso ai dati.
+ */
 class UscitaViewModel(
     private val uscitaRepository: UscitaRepository,
     private val gruppoRepository: GruppoRepository,
     private val carburanteRepository: CarburanteRepository
 ) : ViewModel() {
 
-    private val MAPS_API_KEY = Config.GOOGLE_MAPS_KEY
+    private val mapsAPIKEY = Config.GOOGLE_MAPS_KEY
     private val calcoloUseCase = CalcoloTurnoUseCase()
 
     private var currentUscitaId: String = ""
@@ -141,7 +145,7 @@ class UscitaViewModel(
             return
         }
 
-        if (MAPS_API_KEY.isEmpty() || MAPS_API_KEY.contains("YOUR_")) {
+        if (mapsAPIKEY.isEmpty() || mapsAPIKEY.contains("YOUR_")) {
             _errorMessage.value = "Configurazione Chiave Google Maps mancante!"
             return
         }
@@ -170,7 +174,7 @@ class UscitaViewModel(
         val originEnc = URLEncoder.encode(origin, "UTF-8")
         val destEnc = URLEncoder.encode(destination, "UTF-8")
 
-        val url = "https://maps.googleapis.com/maps/api/directions/json?origin=$originEnc&destination=$destEnc&key=$MAPS_API_KEY"
+        val url = "https://maps.googleapis.com/maps/api/directions/json?origin=$originEnc&destination=$destEnc&key=$mapsAPIKEY"
 
         val jsonResponse = URL(url).readText()
         val jsonObject = JSONObject(jsonResponse)
@@ -212,7 +216,6 @@ class UscitaViewModel(
 
             if (res.isNotEmpty()) {
                 val sb = StringBuilder("🚗 Consigliati:\n")
-                // Il Bilancio ora rappresenta "Euro di credito/debito"
                 res.forEach { (a, bilancioEuro) ->
                     val segno = if (bilancioEuro > 0) "+" else ""
                     sb.append("- ${a.nome} (Bilancio: $segno${String.format(Locale.US, "%.2f", bilancioEuro)}€)\n")
@@ -235,7 +238,7 @@ class UscitaViewModel(
 
         viewModelScope.launch {
             val nuovaUscita = Uscita(
-                id = if (currentUscitaId.isEmpty()) "" else currentUscitaId,
+                id = currentUscitaId.ifEmpty { "" },
                 nome = _nomeUscita.value,
                 gruppoId = currentGruppoId,
                 partecipantiIds = _partecipantiSelezionati.value.toList(),
@@ -260,13 +263,12 @@ class UscitaViewModel(
         }
     }
 
-    private suspend fun applicaStatistiche(u: Uscita, prezzi: Map<String, Double>) {
+    private fun applicaStatistiche(u: Uscita, prezzi: Map<String, Double>) {
         u.partecipantiIds.forEach { id ->
             val amico = _amiciDelGruppo.value.find { it.id == id }
             val haGuidato = u.guidatoriIds.contains(id)
             val kmFisici = if (haGuidato) u.kmTotali else 0
 
-            // Il Karma ora è letteralmente il costo in EURO del viaggio
             var euroSpesi = 0.0
             if (haGuidato && amico != null) {
                 val costoKm = calcoloUseCase.calcolaCostoChilometrico(amico, prezzi)
@@ -278,12 +280,12 @@ class UscitaViewModel(
                 deltaUscite = 1,
                 deltaGuide = if (haGuidato) 1 else 0,
                 deltaKm = kmFisici,
-                deltaKarma = euroSpesi // Aggiungiamo gli Euro spesi al salvadanaio
+                deltaKarma = euroSpesi
             )
         }
     }
 
-    private suspend fun revertStatistiche(u: Uscita, prezzi: Map<String, Double>) {
+    private fun revertStatistiche(u: Uscita, prezzi: Map<String, Double>) {
         u.partecipantiIds.forEach { id ->
             val amico = _amiciDelGruppo.value.find { it.id == id }
             val haGuidato = u.guidatoriIds.contains(id)

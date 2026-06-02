@@ -84,7 +84,7 @@ class CalcoloTurnoUseCase {
     }
 
     /**
-     * COMMAND: Calcola il costo esatto in EURO per 1 solo Kilometro.
+     * COMMAND: Calcola il costo esatto in EURO per 1 solo Chilometro.
      * Formula: (Consumo / 100) * Prezzo
      */
     fun calcolaCostoChilometrico(amico: Amico, prezzi: Map<String, Double>): Double {

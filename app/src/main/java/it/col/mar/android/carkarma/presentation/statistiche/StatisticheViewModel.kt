@@ -2,13 +2,12 @@ package it.col.mar.android.carkarma.presentation.statistiche
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import it.col.mar.android.carkarma.data.database.GruppoRepository
-import it.col.mar.android.carkarma.data.database.UscitaRepository
+import it.col.mar.android.carkarma.domain.repository.GruppoRepository // CORRETTO: Importiamo l'interfaccia di dominio
+import it.col.mar.android.carkarma.domain.repository.UscitaRepository // CORRETTO: Importiamo l'interfaccia di dominio
 import it.col.mar.android.carkarma.data.model.Amico
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 // Dati per la riga della classifica
 data class StatisticaMembro(
@@ -20,9 +19,13 @@ data class StatisticaMembro(
     val isSanto: Boolean      // Se è sopra la media del gruppo
 )
 
+/**
+ * ViewModel per la visualizzazione delle Statistiche del Gruppo.
+ * Dipende esclusivamente dalle interfacce definite nel Domain Layer (Clean Architecture).
+ */
 class StatisticheViewModel(
-    private val gruppoRepository: GruppoRepository,
-    private val uscitaRepository: UscitaRepository
+    private val gruppoRepository: GruppoRepository, // CORRETTO: Tipo cambiato a Interfaccia
+    private val uscitaRepository: UscitaRepository  // CORRETTO: Tipo cambiato a Interfaccia
 ) : ViewModel() {
 
     private val _nomeGruppo = MutableStateFlow("")
@@ -44,11 +47,11 @@ class StatisticheViewModel(
 
     fun loadStatistiche(gruppoId: String) {
         viewModelScope.launch {
-            // 1. Info Gruppo
+            // 1. Info Gruppo recuperate tramite interfaccia astratta
             val gruppo = gruppoRepository.getGruppoPerId(gruppoId)
             _nomeGruppo.value = gruppo?.nome ?: "Gruppo"
 
-            // 2. Calcolo Totali dalle Uscite
+            // 2. Calcolo Totali dalle Uscite (Snapshot una-tantum)
             val uscite = uscitaRepository.getUsciteSnapshot(gruppoId)
             val kmTot = uscite.sumOf { it.kmTotali }
             val countUscite = uscite.size
@@ -61,20 +64,14 @@ class StatisticheViewModel(
             val membri = gruppoRepository.getMembriSnapshot(gruppoId)
 
             if (membri.isNotEmpty() && kmTot > 0) {
-                // Calcoliamo la "Media del Gruppo" (Km Totali / Somma presenze totali)
-                // per capire chi fa più della sua parte.
                 val presenzeTotali = membri.sumOf { it.uscite }
                 val mediaGruppoKarma = if (presenzeTotali > 0) kmTot.toDouble() / presenzeTotali else 0.0
 
                 val stats = membri.map { membro ->
                     val guidati = membro.km
-                    val presenze = membro.uscite.coerceAtLeast(1) // Evitiamo divisione per 0
+                    val presenze = membro.uscite.coerceAtLeast(1)
 
-                    // IL PUNTEGGIO KARMA VERO: Km Guidati diviso Uscite a cui ha partecipato
                     val karmaPunteggio = guidati.toDouble() / presenze
-
-                    // Percentuale grafica (rispetto al max possibile o al totale km)
-                    // Usiamo il totale km per dare un'idea del contributo volumetrico
                     val perc = if (kmTot > 0) guidati.toFloat() / kmTot.toFloat() else 0f
 
                     StatisticaMembro(
@@ -83,12 +80,10 @@ class StatisticheViewModel(
                         usciteFatte = membro.uscite,
                         karma = karmaPunteggio,
                         percentuale = perc,
-                        isSanto = karmaPunteggio >= mediaGruppoKarma // Confronto con la media reale
+                        isSanto = karmaPunteggio >= mediaGruppoKarma
                     )
                 }
 
-                // ORDINAMENTO PER KARMA (dal più alto al più basso)
-                // Chi ha il punteggio più alto è quello che "si sacrifica" di più in media
                 _classifica.value = stats.sortedByDescending { it.karma }
             } else {
                 _classifica.value = emptyList()

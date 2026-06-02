@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.*
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -41,16 +42,13 @@ fun StatisticheScreen(
     val media by viewModel.mediaKm.collectAsState()
     val classifica by viewModel.classifica.collectAsState()
 
-    // RIMOSSO SCAFFOLD INTERNO: Usiamo direttamente la Colonna per gestire gli spazi
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp)
-            // Padding inferiore per non coprire l'ultimo elemento con la barra di sistema
             .padding(bottom = 16.dp)
     ) {
         // --- HEADER COMPATTO (Sostituisce la TopAppBar) ---
-        // Riduce drasticamente lo spazio verticale
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -59,7 +57,7 @@ fun StatisticheScreen(
         ) {
             IconButton(
                 onClick = { navController.popBackStack() },
-                modifier = Modifier.size(24.dp) // Icona piccola
+                modifier = Modifier.size(24.dp)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -80,7 +78,7 @@ fun StatisticheScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 24.dp), // Spazio sotto le bolle
+                .padding(bottom = 24.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             StatBubble(
@@ -140,7 +138,6 @@ fun StatisticheScreen(
     }
 }
 
-// ... StatBubble e ClassificaItem rimangono uguali ...
 @Composable
 fun StatBubble(label: String, value: String, icon: ImageVector, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -206,14 +203,17 @@ fun ClassificaItem(stat: StatisticaMembro) {
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
+            // CORRETTO: Sostituito la lambda progress = { stat.percentuale } con il semplice Float stat.percentuale
+            // per garantire la compilazione con il BOM di Compose 2024.04.01 (M3 < 1.3.0)
             LinearProgressIndicator(
-                progress = { stat.percentuale },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(CircleShape),
-                color = if (stat.isSanto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            progress = { stat.percentuale },
+            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(CircleShape),
+            color = if (stat.isSanto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
             )
         }
     }

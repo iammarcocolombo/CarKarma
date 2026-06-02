@@ -2,14 +2,14 @@ package it.col.mar.android.carkarma.presentation.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import it.col.mar.android.carkarma.data.database.GruppoRepository
+import it.col.mar.android.carkarma.domain.repository.GruppoRepository // CORRETTO: Utilizziamo l'interfaccia dal dominio
 import it.col.mar.android.carkarma.data.model.Gruppo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class HomeViewModel(
-    private val repository: GruppoRepository
+    private val repository: GruppoRepository // CORRETTO: Dipende dall'interfaccia e non dalla classe concreta
 ) : ViewModel() {
 
     val gruppi: StateFlow<List<Gruppo>> = repository.gruppi
@@ -21,8 +21,6 @@ class HomeViewModel(
         // SINCRONIZZAZIONE AUTOMATICA ALL'AVVIO
         // Ascoltiamo i gruppi: appena vengono caricati da Firebase,
         // scarichiamo anche i membri e li salviamo nella rubrica personale.
-        // Questo garantisce che se ti unisci a un gruppo (anche da un altro dispositivo),
-        // ti ritrovi gli amici pronti per creare nuovi gruppi.
         viewModelScope.launch {
             repository.gruppi.collect { listaGruppi ->
                 if (listaGruppi.isNotEmpty()) {
@@ -30,10 +28,6 @@ class HomeViewModel(
                 }
             }
         }
-    }
-
-    fun aggiungiGruppo(gruppo: Gruppo) {
-        repository.aggiungiGruppo(gruppo)
     }
 
     fun uniscitiAlGruppo(inputUtente: String) {
@@ -45,7 +39,6 @@ class HomeViewModel(
         var codicePulito = inputUtente.trim()
 
         if (codicePulito.contains("/")) {
-            // Prende tutto quello che c'è dopo l'ultimo slash (es. da "carkarma://join/XYZ" prende "XYZ")
             codicePulito = codicePulito.substringAfterLast("/")
         }
 

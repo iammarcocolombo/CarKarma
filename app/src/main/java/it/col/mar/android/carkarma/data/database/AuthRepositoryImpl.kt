@@ -1,4 +1,4 @@
-package it.col.mar.android.carkarma.util
+package it.col.mar.android.carkarma.data.database
 
 import android.content.Context
 import android.content.Intent
@@ -6,28 +6,32 @@ import android.content.IntentSender
 import com.google.android.gms.auth.api.identity.BeginSignInRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.auth.api.identity.SignInClient
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
+import it.col.mar.android.carkarma.data.model.UserData
+import it.col.mar.android.carkarma.domain.repository.AuthRepository
+import it.col.mar.android.carkarma.domain.repository.SignInResult
+import it.col.mar.android.carkarma.util.Config
 import kotlinx.coroutines.tasks.await
 import java.util.concurrent.CancellationException
 
-class GoogleAuthClient(
-    private val context: Context
-) {
-    private val auth = Firebase.auth
+class AuthRepositoryImpl(
+    context: Context,
+    private val auth: FirebaseAuth
+) : AuthRepository {
+
     private val oneTapClient: SignInClient = Identity.getSignInClient(context)
 
-    fun getSignedInUser(): UserData? = auth.currentUser?.run {
+    override fun getSignedInUser(): UserData? = auth.currentUser?.run {
         UserData(
             userId = uid,
             username = displayName,
             profilePictureUrl = photoUrl?.toString(),
-            email = email // Recuperiamo l'email per gli inviti
+            email = email
         )
     }
 
-    suspend fun signIn(): IntentSender? {
+    override suspend fun signIn(): IntentSender? {
         val result = try {
             oneTapClient.beginSignIn(
                 BeginSignInRequest.builder()
@@ -35,7 +39,6 @@ class GoogleAuthClient(
                         BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
                             .setSupported(true)
                             .setFilterByAuthorizedAccounts(false)
-                            // MODIFICA: Legge l'ID dal file Config!
                             .setServerClientId(Config.GOOGLE_WEB_CLIENT_ID)
                             .build()
                     )
@@ -43,39 +46,37 @@ class GoogleAuthClient(
                     .build()
             ).await()
         } catch (e: Exception) {
-            e.printStackTrace()
             if (e is CancellationException) throw e
             null
         }
         return result?.pendingIntent?.intentSender
     }
 
-    suspend fun signInWithIntent(intent: Intent): SignInResult {
-        val credential = oneTapClient.getSignInCredentialFromIntent(intent)
-        val googleIdToken = credential.googleIdToken
-        val googleCredentials = GoogleAuthProvider.getCredential(googleIdToken, null)
-
+    override suspend fun signInWithIntent(intent: Intent): SignInResult {
         return try {
+            val credential = oneTapClient.getSignInCredentialFromIntent(intent)
+            val googleIdToken = credential.googleIdToken
+            val googleCredentials = GoogleAuthProvider.getCredential(googleIdToken, null)
+
             val user = auth.signInWithCredential(googleCredentials).await().user
             SignInResult(
-                data = user?.run {
+                data = user?.let {
                     UserData(
-                        userId = uid,
-                        username = displayName,
-                        profilePictureUrl = photoUrl?.toString(),
-                        email = email
+                        userId = it.uid,
+                        username = it.displayName,
+                        profilePictureUrl = it.photoUrl?.toString(),
+                        email = it.email
                     )
                 },
                 errorMessage = null
             )
         } catch (e: Exception) {
-            e.printStackTrace()
             if (e is CancellationException) throw e
-            SignInResult(data = null, errorMessage = e.message)
+            SignInResult(data = null, errorMessage = e.localizedMessage)
         }
     }
 
-    suspend fun signOut() {
+    override suspend fun signOut() {
         try {
             oneTapClient.signOut().await()
             auth.signOut()
@@ -84,26 +85,13 @@ class GoogleAuthClient(
         }
     }
 
-    suspend fun deleteAccount(): Boolean {
+    override suspend fun deleteAccount(): Boolean {
         return try {
-            oneTapClient.signOut().await()
             auth.currentUser?.delete()?.await()
+            oneTapClient.signOut().await()
             true
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (_: Exception) {
             false
         }
     }
 }
-
-data class SignInResult(
-    val data: UserData?,
-    val errorMessage: String?
-)
-
-data class UserData(
-    val userId: String,
-    val username: String?,
-    val profilePictureUrl: String?,
-    val email: String?
-)

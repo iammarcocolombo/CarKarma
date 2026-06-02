@@ -1,14 +1,15 @@
 package it.col.mar.android.carkarma.data.database
 
 import com.google.firebase.firestore.FirebaseFirestore
+import it.col.mar.android.carkarma.domain.repository.CarburanteRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.net.URL
 
-class CarburanteRepository(
+class CarburanteRepositoryImpl(
     private val db: FirebaseFirestore
-) {
+) : CarburanteRepository {
 
     private val prezziDefault = mapOf(
         "Benzina" to 1.800,
@@ -19,12 +20,12 @@ class CarburanteRepository(
         "Ibrida" to 1.800
     )
 
-    private val MINISTERO_CSV_URL = "https://dgsaie.mise.gov.it/open_data_export.php?export-id=2&export-type=csv"
+    private val ministeroCsvUrl = "https://dgsaie.mise.gov.it/open_data_export.php?export-id=2&export-type=csv"
 
-    suspend fun getPrezziAggiornati(): Map<String, Double> {
+    override suspend fun getPrezziAggiornati(): Map<String, Double> {
         val prezziMappa = prezziDefault.toMutableMap()
 
-        // 1. Ministero
+        // 1. Tentativo tramite l'API Open Data del Ministero
         try {
             val prezziMinistero = fetchPrezziMinistero()
             if (prezziMinistero.isNotEmpty()) {
@@ -35,7 +36,7 @@ class CarburanteRepository(
             e.printStackTrace()
         }
 
-        // 2. Firestore (Backup)
+        // 2. Fallback su Firestore (Configurazione salvata nel Cloud)
         try {
             val snapshot = db.collection("configurazione").document("prezzi_carburante").get().await()
             if (snapshot.exists() && snapshot.data != null) {
@@ -48,7 +49,9 @@ class CarburanteRepository(
                     if (prezzo > 0) prezziMappa[key] = prezzo
                 }
             }
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         return prezziMappa
     }
@@ -57,7 +60,7 @@ class CarburanteRepository(
         return withContext(Dispatchers.IO) {
             val mappa = mutableMapOf<String, Double>()
             try {
-                val csvContent = URL(MINISTERO_CSV_URL).readText()
+                val csvContent = URL(ministeroCsvUrl).readText()
                 val righe = csvContent.lines()
 
                 for (i in 1 until righe.size) {
@@ -82,7 +85,9 @@ class CarburanteRepository(
                         }
                     }
                 }
-            } catch (e: Exception) { throw e }
+            } catch (e: Exception) {
+                throw e
+            }
             mappa
         }
     }

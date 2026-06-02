@@ -10,8 +10,8 @@ import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
-import it.col.mar.android.carkarma.util.SignInResult
-import it.col.mar.android.carkarma.util.UserData
+import it.col.mar.android.carkarma.domain.repository.SignInResult // CORREZIONE: Import allineato al modello dati globale
+import it.col.mar.android.carkarma.data.model.UserData     // CORREZIONE: Import allineato al modello dati globale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -29,10 +29,6 @@ class LoginViewModel : ViewModel() {
             isSignInSuccessful = result.data != null,
             signInError = result.errorMessage
         ) }
-    }
-
-    fun resetState() {
-        _state.update { LoginState() }
     }
 
     // --- EMAIL & PASSWORD ---
@@ -108,5 +104,5 @@ class LoginViewModel : ViewModel() {
 data class LoginState(
     val isSignInSuccessful: Boolean = false,
     val signInError: String? = null,
-    val isLoading: Boolean = false // Aggiunto stato per mostrare la rotellina
+    val isLoading: Boolean = false
 )

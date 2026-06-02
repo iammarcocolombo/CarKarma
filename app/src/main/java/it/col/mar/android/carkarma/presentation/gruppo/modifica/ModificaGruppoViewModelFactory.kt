@@ -2,8 +2,8 @@ package it.col.mar.android.carkarma.presentation.gruppo.modifica
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import it.col.mar.android.carkarma.data.database.AmicoRepository
-import it.col.mar.android.carkarma.data.database.GruppoRepository
+import it.col.mar.android.carkarma.domain.repository.AmicoRepository
+import it.col.mar.android.carkarma.domain.repository.GruppoRepository
 
 class ModificaGruppoViewModelFactory(
     private val gruppoRepository: GruppoRepository,

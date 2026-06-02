@@ -2,10 +2,10 @@ package it.col.mar.android.carkarma.presentation.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import it.col.mar.android.carkarma.data.database.GruppoRepository
+import it.col.mar.android.carkarma.domain.repository.GruppoRepository // CORRETTO: Dipende dall'interfaccia di dominio
 
 class HomeViewModelFactory(
-    private val repository: GruppoRepository
+    private val repository: GruppoRepository // CORRETTO: Parametro aggiornato all'interfaccia astratta
 ) : ViewModelProvider.Factory {
 
     @Suppress("UNCHECKED_CAST")

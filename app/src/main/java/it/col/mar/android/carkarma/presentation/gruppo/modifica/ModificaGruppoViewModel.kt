@@ -2,11 +2,8 @@ package it.col.mar.android.carkarma.presentation.gruppo.modifica
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
-import it.col.mar.android.carkarma.data.database.AmicoRepository
-import it.col.mar.android.carkarma.data.database.GruppoRepository
+import it.col.mar.android.carkarma.domain.repository.AmicoRepository
+import it.col.mar.android.carkarma.domain.repository.GruppoRepository
 import it.col.mar.android.carkarma.data.model.Amico
 import it.col.mar.android.carkarma.data.model.Gruppo
 import kotlinx.coroutines.delay
@@ -14,33 +11,30 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
-import java.util.UUID
 
+/**
+ * ViewModel per la creazione e la modifica di un Gruppo.
+ * Totalmente ripulito da dipendenze dirette con Firebase (Clean Architecture).
+ * Interagisce unicamente con le astrazioni (interfacce) dei repository del Domain Layer.
+ */
 class ModificaGruppoViewModel(
     private val gruppoRepository: GruppoRepository,
     private val amicoRepository: AmicoRepository
 ) : ViewModel() {
 
-    private val db = Firebase.firestore
-    private val auth = Firebase.auth
-
     private val _nomeGruppo = MutableStateFlow("")
     val nomeGruppo: StateFlow<String> = _nomeGruppo
 
-    // NUOVO STATO: L'indice dell'avatar selezionato
     private val _selectedAvatarIndex = MutableStateFlow(0)
     val selectedAvatarIndex: StateFlow<Int> = _selectedAvatarIndex
 
-    // Lista amici globale ("Stampini") per la selezione
+    // Otteniamo la lista completa degli amici della rubrica personale
     val amiciDisponibili: StateFlow<List<Amico>> = amicoRepository.amici
 
-    // Set degli ID degli amici selezionati nella UI
     private val _amiciSelezionatiIds = MutableStateFlow<Set<String>>(emptySet())
     val amiciSelezionati: StateFlow<Set<String>> = _amiciSelezionatiIds
 
     private var currentGruppoId: String = ""
-    // Salviamo la lista degli utenti reali (account Google) che hanno accesso al gruppo per non perderla
     private var currentUtentiIds: List<String> = emptyList()
 
     fun loadGruppo(gruppoId: String) {
@@ -50,15 +44,14 @@ class ModificaGruppoViewModel(
                 val gruppo = gruppoRepository.getGruppoPerId(gruppoId)
                 if (gruppo != null) {
                     _nomeGruppo.value = gruppo.nome
-                    _selectedAvatarIndex.value = gruppo.avatarIndex // Carichiamo l'avatar salvato
+                    _selectedAvatarIndex.value = gruppo.avatarIndex
                     currentUtentiIds = gruppo.utentiIds
 
-                    // Carichiamo i membri che sono GIA' nel gruppo per pre-spuntare le checkbox
+                    // Carichiamo i membri attuali del gruppo per popolare le checkbox
                     val membriAttuali = gruppoRepository.getMembriDelGruppo(gruppoId).first()
                     _amiciSelezionatiIds.value = membriAttuali.map { it.id }.toSet()
                 }
             } else {
-                // Nuovo gruppo: tutto vuoto
                 _nomeGruppo.value = ""
                 _selectedAvatarIndex.value = 0
                 _amiciSelezionatiIds.value = emptySet()
@@ -68,7 +61,6 @@ class ModificaGruppoViewModel(
     }
 
     fun onNomeGruppoChange(v: String) { _nomeGruppo.value = v }
-
     fun onAvatarSelected(index: Int) { _selectedAvatarIndex.value = index }
 
     fun toggleAmicoSelezionato(amicoId: String) {
@@ -79,68 +71,54 @@ class ModificaGruppoViewModel(
 
     fun salvaGruppo(onSalvato: () -> Unit) {
         viewModelScope.launch {
-            val idFinale = if (currentGruppoId.isEmpty()) UUID.randomUUID().toString() else currentGruppoId
-            val userId = auth.currentUser?.uid ?: return@launch
-
-            // Usiamo un BATCH: Scrittura atomica (tutto o niente) per sicurezza
-            val batch = db.batch()
-
-            // 1. Preparazione Gruppo
-            // Se è nuovo, aggiungo me stesso. Se esiste, mantengo la lista esistente + me stesso (se mancassi)
-            val utentiAggiornati = if (currentUtentiIds.contains(userId)) currentUtentiIds else currentUtentiIds + userId
+            // Generiamo l'id tramite il repository delegato
+            val idFinale = currentGruppoId.ifEmpty { gruppoRepository.generaNuovoId() }
 
             val gruppo = Gruppo(
                 id = idFinale,
                 nome = _nomeGruppo.value,
                 membriIds = _amiciSelezionatiIds.value.toList(),
-                utentiIds = utentiAggiornati,
-                avatarIndex = _selectedAvatarIndex.value // Salviamo l'indice scelto
+                utentiIds = currentUtentiIds,
+                avatarIndex = _selectedAvatarIndex.value
             )
 
-            val gruppoRef = db.collection("gruppi").document(idFinale)
-            batch.set(gruppoRef, gruppo)
+            // 1. Salviamo l'intestazione del Gruppo tramite interfaccia di Dominio
+            if (currentGruppoId.isEmpty()) {
+                gruppoRepository.aggiungiGruppo(gruppo)
+            } else {
+                gruppoRepository.aggiornaGruppo(gruppo)
+            }
 
-            // 2. Gestione Membri (Sottocollezione)
+            // 2. Allineamento dei membri (sottocollezione)
             val tuttiStampini = amicoRepository.amici.value
             val idsUI = _amiciSelezionatiIds.value
-            val membriRef = gruppoRef.collection("membri")
 
             if (currentGruppoId.isEmpty()) {
-                // CASO A: NUOVO GRUPPO -> Aggiungi tutti i selezionati come nuove istanze (km 0)
+                // Nuovi iscritti per il nuovo gruppo
                 idsUI.forEach { id ->
                     tuttiStampini.find { it.id == id }?.let { template ->
-                        val nuovoMembro = template.copy(uscite = 0, guide = 0, km = 0)
-                        batch.set(membriRef.document(id), nuovoMembro)
+                        gruppoRepository.aggiungiMembroAlGruppo(idFinale, template)
                     }
                 }
             } else {
-                // CASO B: MODIFICA -> Calcolo differenze per non resettare i km di chi c'è già
+                // Calcoliamo la differenza rispetto a chi è già sul database
                 val membriNelDb = gruppoRepository.getMembriDelGruppo(idFinale).first().map { it.id }.toSet()
 
-                // Aggiungi nuovi (reset km)
+                // Selezionati nella UI ma non nel DB -> Vengono aggiunti (nuove istanze a km 0)
                 idsUI.filter { !membriNelDb.contains(it) }.forEach { id ->
                     tuttiStampini.find { it.id == id }?.let { template ->
-                        val nuovoMembro = template.copy(uscite = 0, guide = 0, km = 0)
-                        batch.set(membriRef.document(id), nuovoMembro)
+                        gruppoRepository.aggiungiMembroAlGruppo(idFinale, template)
                     }
                 }
-                // Rimuovi deselezionati
+
+                // Presenti nel DB ma non più nella UI -> Vengono rimossi in modo sicuro
                 membriNelDb.filter { !idsUI.contains(it) }.forEach { id ->
-                    batch.delete(membriRef.document(id))
+                    gruppoRepository.rimuoviMembroDalGruppo(idFinale, id)
                 }
-                // Chi c'è in entrambi non viene toccato, preservando i km
             }
 
-            try {
-                // Eseguiamo tutto in un colpo solo e ASPETTIAMO che finisca
-                batch.commit().await()
-
-                // Piccolo ritardo extra per dare tempo alla UI di aggiornarsi
-                delay(100)
-                onSalvato()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            delay(100)
+            onSalvato()
         }
     }
 

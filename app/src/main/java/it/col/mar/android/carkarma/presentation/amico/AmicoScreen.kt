@@ -5,11 +5,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.EvStation
 import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -25,7 +27,7 @@ fun AmicoScreen(
     viewModel: AmicoViewModel,
     gruppoId: String = ""
 ) {
-    // Carichiamo i dati
+    // Sincronizzazione dati all'avvio o al variare dell'ID
     LaunchedEffect(amicoId) {
         viewModel.loadAmico(amicoId, gruppoId)
     }
@@ -38,7 +40,6 @@ fun AmicoScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     val isEditing = amicoId.isNotEmpty()
 
-    // Stato per il menu a tendina
     var expanded by remember { mutableStateOf(false) }
     val carbuanteOptions = listOf("Benzina", "Diesel", "GPL", "Metano", "Elettrico", "Ibrida")
 
@@ -54,16 +55,34 @@ fun AmicoScreen(
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 32.dp)
         ) {
-            // Intestazione
-            Text(
-                text = if (isEditing) "Modifica Amico" else "Nuovo Amico",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp, top = 0.dp)
-            )
+            // --- HEADER COMPATTO CON TASTO INDIETRO ---
+            // Integrato perfettamente con lo stile grafico di StatisticheScreen
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 20.dp)
+            ) {
+                IconButton(
+                    onClick = { navController.popBackStack() },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Indietro",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = if (isEditing) "Modifica Amico" else "Nuovo Amico",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
 
-            // --- INFO GENERALI ---
+            // --- SEZIONE INFO GENERALI ---
             OutlinedTextField(
                 value = nome,
                 onValueChange = { viewModel.onNomeChange(it) },
@@ -87,10 +106,10 @@ fun AmicoScreen(
             )
 
             Spacer(modifier = Modifier.height(24.dp))
-            Divider()
+            HorizontalDivider()
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- SEZIONE AUTO & CONSUMI ---
+            // --- SEZIONE CONSUMI AUTO ---
             Text(
                 text = "Dati Auto (Opzionale)",
                 style = MaterialTheme.typography.titleMedium,
@@ -98,7 +117,6 @@ fun AmicoScreen(
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            // MENU A TENDINA CARBURANTE
             ExposedDropdownMenuBox(
                 expanded = expanded,
                 onExpandedChange = { expanded = !expanded },
@@ -133,7 +151,6 @@ fun AmicoScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // INPUT CONSUMO (Tornato a L/100km)
             OutlinedTextField(
                 value = consumoMedio,
                 onValueChange = { viewModel.onConsumoChange(it) },
@@ -143,11 +160,9 @@ fun AmicoScreen(
                 leadingIcon = { Icon(Icons.Default.EvStation, null) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth(),
-                // Suffisso dinamico corretto
                 suffix = { Text(if (tipoCarburante == "Elettrico") "kWh/100km" else "L/100km") }
             )
 
-            // Helper Text Aggiornato
             Text(
                 text = "Inserisci quanti litri (o kWh) servono per fare 100km. Lascia vuoto per usare lo standard.",
                 style = MaterialTheme.typography.bodySmall,
@@ -157,7 +172,7 @@ fun AmicoScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            // BOTTONI
+            // BOTTONI SALVATAGGIO / ELIMINAZIONE
             Button(
                 onClick = {
                     viewModel.salvaAmico {
@@ -188,20 +203,19 @@ fun AmicoScreen(
 
     if (showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
+            onDismissRequest = { },
             title = { Text("Eliminare l'amico?") },
             text = { Text("Sei sicuro? Questa azione non può essere annullata.") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         viewModel.eliminaAmico { navController.popBackStack() }
-                        showDeleteDialog = false
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Elimina") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Annulla") }
+                TextButton(onClick = { }) { Text("Annulla") }
             }
         )
     }

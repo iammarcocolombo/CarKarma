@@ -4,9 +4,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -14,7 +16,6 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Warning
@@ -30,9 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import it.col.mar.android.carkarma.R
-import it.col.mar.android.carkarma.data.database.AppContainer
-import it.col.mar.android.carkarma.ui.theme.CarKarmaTheme
-import it.col.mar.android.carkarma.util.UserData
+import it.col.mar.android.carkarma.data.model.UserData
+
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -100,7 +100,7 @@ fun AppScaffold(
                                 )
                             }
 
-                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                             // --- MENU ITEMS ---
                             NavigationDrawerItem(
@@ -144,7 +144,7 @@ fun AppScaffold(
                             )
 
                             Spacer(modifier = Modifier.weight(1f))
-                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                             NavigationDrawerItem(
                                 label = { Text("Elimina Account", color = MaterialTheme.colorScheme.error) },
@@ -166,6 +166,7 @@ fun AppScaffold(
             content = {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     Scaffold(
+                        contentWindowInsets = WindowInsets.safeDrawing,
                         topBar = {
                             if (showBars) {
                                 TopAppBar(
@@ -194,7 +195,11 @@ fun AppScaffold(
                             }
                         }
                     ) { paddingValues ->
-                        content(paddingValues)
+                        // APPLICHIAMO IL PADDING QUI!
+                        // In questo modo tutte le schermate figlie sono protette dalle barre automaticamente
+                        Box(modifier = Modifier.padding(paddingValues)) {
+                            content(paddingValues)
+                        }
                     }
                 }
             }
@@ -203,13 +208,12 @@ fun AppScaffold(
 
     if (showDeleteConfirmDialog) {
         AlertDialog(
-            onDismissRequest = { showDeleteConfirmDialog = false },
+            onDismissRequest = { },
             title = { Text("Eliminare l'account?") },
             text = { Text("Questa azione è irreversibile. I tuoi dati personali verranno rimossi, ma i dati nei gruppi condivisi potrebbero rimanere visibili agli altri membri per mantenere lo storico.") },
             confirmButton = {
                 Button(
                     onClick = {
-                        showDeleteConfirmDialog = false
                         onDeleteAccount()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -218,7 +222,7 @@ fun AppScaffold(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirmDialog = false }) { Text("Annulla") }
+                TextButton(onClick = { }) { Text("Annulla") }
             },
             icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) }
         )

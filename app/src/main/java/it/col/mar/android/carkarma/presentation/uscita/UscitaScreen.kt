@@ -37,7 +37,6 @@ fun UscitaScreen(
         viewModel.loadUscita(gruppoId, uscitaId)
     }
 
-    // Stati
     val nomeUscita by viewModel.nomeUscita.collectAsState()
     val amiciDelGruppo by viewModel.amiciDelGruppo.collectAsState()
     val partecipantiSelezionati by viewModel.partecipantiSelezionati.collectAsState()
@@ -55,12 +54,10 @@ fun UscitaScreen(
     var showEliminaDialog by remember { mutableStateOf(false) }
     val isEditing = uscitaId.isNotEmpty()
 
-    // Bottom Sheet per il suggerimento
     val sheetState = rememberModalBottomSheetState()
     var showSuggestionSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    // Mostra il sheet quando arriva un suggerimento
     LaunchedEffect(suggerimento) {
         if (suggerimento != null) {
             showSuggestionSheet = true
@@ -73,7 +70,6 @@ fun UscitaScreen(
 
     val scrollState = rememberScrollState()
 
-    // MODIFICA: Usiamo un Box invece dello Scaffold interno per uniformità con le altre schermate
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -82,20 +78,16 @@ fun UscitaScreen(
                 .fillMaxSize()
                 .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp)
-                // Padding inferiore extra per non tagliare l'ultimo bottone se lo schermo è piccolo
                 .padding(bottom = 32.dp)
         ) {
-            // Intestazione
             Text(
                 text = if (isEditing) "Modifica Uscita" else "Nuova Uscita",
                 style = MaterialTheme.typography.headlineMedium,
-                // MODIFICA COLORE: Uniformato a "onBackground" come nella Home
                 color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 24.dp, top = 0.dp) // Top 0 per attaccarlo alla barra
+                modifier = Modifier.padding(bottom = 24.dp, top = 0.dp)
             )
 
-            // Campo Nome
             OutlinedTextField(
                 value = nomeUscita,
                 onValueChange = { viewModel.onNomeUscitaChange(it) },
@@ -107,7 +99,6 @@ fun UscitaScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- SEZIONE PERCORSO ---
             Text(
                 text = "Percorso",
                 style = MaterialTheme.typography.titleMedium,
@@ -120,7 +111,6 @@ fun UscitaScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    // Campi Indirizzo
                     Row(modifier = Modifier.fillMaxWidth()) {
                         OutlinedTextField(
                             value = partenza,
@@ -143,7 +133,6 @@ fun UscitaScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // RIGA: Bottone Calcolo + Switch A/R
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
@@ -174,7 +163,6 @@ fun UscitaScreen(
                             Spacer(modifier = Modifier.weight(1f))
                         }
 
-                        // Switch A/R
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "A/R",
@@ -191,7 +179,6 @@ fun UscitaScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Campo KM
                     OutlinedTextField(
                         value = if (kmTotali == 0) "" else kmTotali.toString(),
                         onValueChange = { text ->
@@ -208,7 +195,6 @@ fun UscitaScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- SEZIONE PARTECIPANTI ---
             Text(
                 text = "Chi è presente? (${partecipantiSelezionati.size})",
                 style = MaterialTheme.typography.titleMedium,
@@ -247,7 +233,6 @@ fun UscitaScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- BOTTONE SUGGERIMENTO ALGORITMO ---
             if (!isEditing && partecipantiSelezionati.size >= 2) {
                 OutlinedButton(
                     onClick = { viewModel.calcolaSuggerimento() },
@@ -261,7 +246,6 @@ fun UscitaScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
-            // --- SEZIONE GUIDATORI ---
             if (partecipantiSelezionati.isNotEmpty()) {
                 Text(
                     text = "Chi ha guidato?",
@@ -297,7 +281,6 @@ fun UscitaScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // --- SALVATAGGIO ---
             Button(
                 onClick = { viewModel.salvaUscita { navController.popBackStack() } },
                 enabled = isFormValid,
@@ -321,11 +304,9 @@ fun UscitaScreen(
         }
     }
 
-    // --- BOTTOM SHEET PER IL SUGGERIMENTO ---
     if (showSuggestionSheet) {
         ModalBottomSheet(
             onDismissRequest = {
-                showSuggestionSheet = false
                 viewModel.resetSuggerimento()
             },
             sheetState = sheetState
@@ -366,7 +347,6 @@ fun UscitaScreen(
                 Button(
                     onClick = {
                         scope.launch { sheetState.hide() }.invokeOnCompletion {
-                            showSuggestionSheet = false
                             viewModel.resetSuggerimento()
                         }
                     },
@@ -378,7 +358,6 @@ fun UscitaScreen(
         }
     }
 
-    // Dialog Errore
     if (errorMessage != null) {
         AlertDialog(
             onDismissRequest = { viewModel.clearError() },
@@ -389,19 +368,18 @@ fun UscitaScreen(
         )
     }
 
-    // Dialog Elimina
     if (showEliminaDialog) {
         AlertDialog(
-            onDismissRequest = { showEliminaDialog = false },
+            onDismissRequest = { },
             title = { Text("Eliminare?") },
             text = { Text("L'operazione è irreversibile e i km verranno rimossi dalle statistiche.") },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.eliminaUscita { navController.popBackStack() }; showEliminaDialog = false },
+                    onClick = { viewModel.eliminaUscita { navController.popBackStack() } },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Elimina") }
             },
-            dismissButton = { TextButton(onClick = { showEliminaDialog = false }) { Text("Annulla") } }
+            dismissButton = { TextButton(onClick = { }) { Text("Annulla") } }
         )
     }
 }

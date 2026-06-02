@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -18,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -44,27 +46,40 @@ fun ModificaGruppoScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            // MODIFICA: Padding solo orizzontale e inferiore.
-            // Rimosso il padding 'top' implicito del 'padding(16.dp)' per attaccarlo alla barra.
             .padding(horizontal = 16.dp)
             .padding(bottom = 16.dp)
     ) {
-        // Intestazione
+        // --- HEADER COMPATTO CON TASTO INDIETRO ---
+        // Allineato stilisticamente con tutte le altre schermate di CarKarma
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                // Aggiungiamo un minimo di spazio sotto il titolo
-                .padding(bottom = 16.dp, top = 0.dp),
+                .padding(bottom = 16.dp, top = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = if (!isEditing) "Crea Nuovo Gruppo" else "Modifica Gruppo",
-                style = MaterialTheme.typography.headlineMedium,
-                // MODIFICA COLORE: Uniformato a onBackground
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                IconButton(
+                    onClick = { navController.popBackStack() },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Indietro",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = if (!isEditing) "Crea Gruppo" else "Modifica Gruppo",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             if (isEditing) {
                 IconButton(onClick = { showDeleteDialog = true }) {
                     Icon(
@@ -108,7 +123,7 @@ fun ModificaGruppoScreen(
                         )
                         .border(
                             width = if (isSelected) 2.dp else 0.dp,
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                             shape = CircleShape
                         )
                         .clickable { viewModel.onAvatarSelected(index) }
@@ -193,7 +208,7 @@ fun ModificaGruppoScreen(
 
     if (showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
+            onDismissRequest = { },
             title = { Text("Eliminare il gruppo?") },
             text = { Text("Sei sicuro? Verranno eliminate anche tutte le uscite associate.") },
             confirmButton = {
@@ -202,12 +217,11 @@ fun ModificaGruppoScreen(
                         viewModel.eliminaGruppo {
                             navController.navigate("home") { popUpTo("home") { inclusive = true } }
                         }
-                        showDeleteDialog = false
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Elimina") }
             },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Annulla") } }
+            dismissButton = { TextButton(onClick = { }) { Text("Annulla") } }
         )
     }
 }

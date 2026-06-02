@@ -9,14 +9,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,9 +27,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import it.col.mar.android.carkarma.data.model.Uscita
 import it.col.mar.android.carkarma.util.AvatarProvider
 import it.col.mar.android.carkarma.util.QrCodeGenerator
 import kotlinx.coroutines.launch
@@ -42,7 +41,6 @@ fun GruppoScreen(
     gruppoId: String,
     viewModel: GruppoViewModel
 ) {
-    // Carichiamo i dati del gruppo appena entriamo nella schermata
     LaunchedEffect(gruppoId) {
         viewModel.loadGruppo(gruppoId)
     }
@@ -53,13 +51,11 @@ fun GruppoScreen(
 
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    val scope = rememberCoroutineScope() // Necessario per gestire il BottomSheet
+    val scope = rememberCoroutineScope()
 
-    // Stato per il Bottom Sheet di Condivisione
     var showShareSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
-    // Stato per il Dialog di conferma uscita
     var showLeaveDialog by remember { mutableStateOf(false) }
 
     if (errorMessage != null) {
@@ -76,17 +72,40 @@ fun GruppoScreen(
         return
     }
 
-    // MODIFICA: Usiamo un Box invece dello Scaffold interno per controllo totale
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                // Nessun padding top: il contenuto parte subito sotto la TopBar globale
                 .padding(horizontal = 16.dp)
         ) {
-            // Rimosso Spacer(8.dp): L'avatar è attaccato in alto per massimizzare lo spazio
+            // --- HEADER COMPATTO CON TASTO INDIETRO ---
+            // Integrato con la coerenza stilistica di StatisticheScreen e AmicoScreen
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 16.dp)
+            ) {
+                IconButton(
+                    onClick = { navController.popBackStack() },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Indietro",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Dettaglio Gruppo",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
 
             // --- AVATAR GRUPPO ---
             Box(
@@ -98,7 +117,6 @@ fun GruppoScreen(
                     color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier
                         .size(80.dp)
-                        // Piccolo padding top interno solo per non tagliare l'ombra dell'icona
                         .padding(top = 4.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -114,7 +132,7 @@ fun GruppoScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // --- HEADER GRUPPO ---
+            // --- INFO E AZIONI GRUPPO ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -135,22 +153,18 @@ fun GruppoScreen(
                 }
 
                 Row {
-                    // 1. STATISTICHE
                     IconButton(onClick = { navController.navigate("statistiche/${gruppo!!.id}") }) {
                         Icon(Icons.Default.BarChart, "Statistiche", tint = MaterialTheme.colorScheme.tertiary)
                     }
 
-                    // 2. INVITA (Apre BottomSheet)
                     IconButton(onClick = { showShareSheet = true }) {
                         Icon(Icons.Default.Share, "Invita", tint = MaterialTheme.colorScheme.primary)
                     }
 
-                    // 3. MODIFICA
                     IconButton(onClick = { navController.navigate("modificaGruppo?gruppoId=${gruppo!!.id}") }) {
                         Icon(Icons.Default.Edit, "Modifica", tint = MaterialTheme.colorScheme.primary)
                     }
 
-                    // 4. LASCIA GRUPPO
                     IconButton(onClick = { showLeaveDialog = true }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ExitToApp,
@@ -191,7 +205,6 @@ fun GruppoScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    // Padding inferiore per non far coprire l'ultimo elemento dal FAB
                     contentPadding = PaddingValues(bottom = 100.dp)
                 ) {
                     items(uscite) { uscita ->
@@ -205,7 +218,6 @@ fun GruppoScreen(
             }
         }
 
-        // FAB posizionato manualmente
         ExtendedFloatingActionButton(
             onClick = { navController.navigate("uscita/${gruppoId}") },
             containerColor = MaterialTheme.colorScheme.primary,
@@ -218,7 +230,6 @@ fun GruppoScreen(
         )
     }
 
-    // --- BOTTOM SHEET CONDIVISIONE ---
     if (showShareSheet && gruppo != null) {
         ModalBottomSheet(
             onDismissRequest = { showShareSheet = false },
@@ -298,11 +309,7 @@ fun GruppoScreen(
                             putExtra(Intent.EXTRA_TEXT, "Unisciti al mio gruppo su CarKarma! Usa questo codice:\n\n${gruppo!!.id}")
                         }
                         context.startActivity(Intent.createChooser(shareIntent, "Invia codice..."))
-                        scope.launch { sheetState.hide() }.invokeOnCompletion {
-                            if (!sheetState.isVisible) {
-                                showShareSheet = false
-                            }
-                        }
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {showShareSheet = false}
                     },
                     modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) {
@@ -316,35 +323,62 @@ fun GruppoScreen(
 
     if (showLeaveDialog) {
         AlertDialog(
-            onDismissRequest = { showLeaveDialog = false },
+            onDismissRequest = { showShareSheet = false },
             title = { Text("Lasciare il gruppo?") },
             text = { Text("Se esci, non vedrai più questo gruppo nella tua Home, ma i dati non verranno cancellati per gli altri partecipanti.") },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.lasciaGruppo { navController.popBackStack() }; showLeaveDialog = false
+                        viewModel.lasciaGruppo { navController.popBackStack() }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Lascia Gruppo") }
             },
-            dismissButton = { TextButton(onClick = { showLeaveDialog = false }) { Text("Annulla") } }
+            dismissButton = { TextButton(onClick = { }) { Text("Annulla") } }
         )
     }
 }
 
 @Composable
-fun UscitaCard(uscita: it.col.mar.android.carkarma.data.model.Uscita, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), elevation = CardDefaults.cardElevation(0.dp)) {
-        Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+fun UscitaCard(uscita: Uscita, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(Icons.Default.Map, null, tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = uscita.nome, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                Text(
+                    text = uscita.nome,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
                 val sottotitolo = if (uscita.destinazione.isNotBlank()) "Verso: ${uscita.destinazione}" else "${uscita.partecipantiIds.size} partecipanti"
-                Text(text = sottotitolo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = sottotitolo,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.small) {
-                Text(text = "${uscita.kmTotali} km", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(8.dp, 4.dp), color = MaterialTheme.colorScheme.onSurface)
+            Surface(
+                color = MaterialTheme.colorScheme.background,
+                shape = MaterialTheme.shapes.small
+            ) {
+                Text(
+                    text = "${uscita.kmTotali} km",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
     }

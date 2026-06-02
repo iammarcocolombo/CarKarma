@@ -12,7 +12,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.GroupAdd
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +30,7 @@ import it.col.mar.android.carkarma.util.AvatarProvider
 fun HomeScreen(
     navController: NavHostController
 ) {
+    // Istanziamo il ViewModel sfruttando il repository esposto centralmente nell'AppContainer
     val viewModel: HomeViewModel = viewModel(
         factory = HomeViewModelFactory(AppContainer.gruppoRepository)
     )
@@ -40,13 +40,11 @@ fun HomeScreen(
 
     val context = LocalContext.current
 
-    // Stato per il Dialog "Unisciti" manuale
     var showJoinDialog by remember { mutableStateOf(false) }
     var codiceGruppoInput by remember { mutableStateOf("") }
 
-    // Gestione risultato Join
     LaunchedEffect(joinState) {
-        when(joinState) {
+        when (joinState) {
             is JoinState.Success -> {
                 Toast.makeText(context, "Ti sei unito al gruppo!", Toast.LENGTH_SHORT).show()
                 showJoinDialog = false
@@ -54,13 +52,12 @@ fun HomeScreen(
                 codiceGruppoInput = ""
             }
             is JoinState.Error -> {
-                // L'errore viene mostrato nel dialog
+                // L'errore viene visualizzato direttamente all'interno del Dialog
             }
             else -> {}
         }
     }
 
-    // MODIFICA: Usiamo un Box invece dello Scaffold interno per controllo totale del layout (come GruppoScreen)
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -69,17 +66,17 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-            // Titolo interno (Padding ottimizzato)
+            // Sotto-intestazione pulita ed elegante, allineata a sinistra (senza ripetere "Benvenuto su CarKarma")
             Text(
                 text = "I tuoi Gruppi",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onBackground,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp, top = 0.dp)
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(vertical = 12.dp)
             )
 
             if (gruppi.isEmpty()) {
-                // --- EMPTY STATE ---
+                // --- STATO VUOTO (EMPTY STATE) ---
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -90,7 +87,7 @@ fun HomeScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.List,
                             contentDescription = null,
-                            modifier = Modifier.size(100.dp),
+                            modifier = Modifier.size(80.dp),
                             tint = MaterialTheme.colorScheme.surfaceVariant
                         )
                         Spacer(modifier = Modifier.height(16.dp))
@@ -110,7 +107,7 @@ fun HomeScreen(
                 // --- LISTA GRUPPI ---
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 120.dp) // Spazio abbondante per i FAB
+                    contentPadding = PaddingValues(bottom = 88.dp) // Spazio ideale per non sovrapporsi ai FAB
                 ) {
                     items(gruppi) { gruppo ->
                         GruppoCard(
@@ -123,14 +120,14 @@ fun HomeScreen(
             }
         }
 
-        // FABs Posizionati manualmente in basso a destra
+        // FAB posizionati in modo reattivo nell'angolo in basso a destra
         Column(
             horizontalAlignment = Alignment.End,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp)
         ) {
-            // FAB SECONDARIO: Unisciti a Gruppo (Codice manuale)
+            // FAB Secondario: Consente di unirsi a un gruppo tramite codice d'invito
             SmallFloatingActionButton(
                 onClick = { showJoinDialog = true },
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -141,7 +138,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // FAB PRINCIPALE: Crea Gruppo
+            // FAB Principale: Crea un nuovo gruppo da zero
             FloatingActionButton(
                 onClick = { navController.navigate("modificaGruppo") },
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -152,14 +149,14 @@ fun HomeScreen(
         }
     }
 
-    // --- DIALOG UNISCITI ---
+    // --- DIALOG DI INVITO / INGRESSO ---
     if (showJoinDialog) {
         AlertDialog(
-            onDismissRequest = { showJoinDialog = false; viewModel.resetJoinState() },
+            onDismissRequest = { viewModel.resetJoinState() },
             title = { Text("Unisciti a un Gruppo") },
             text = {
                 Column {
-                    Text("Inserisci il codice ID del gruppo:")
+                    Text("Inserisci il codice ID o l'indirizzo d'invito del gruppo:")
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = codiceGruppoInput,
@@ -197,7 +194,7 @@ fun HomeScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showJoinDialog = false; viewModel.resetJoinState() }) {
+                TextButton(onClick = { viewModel.resetJoinState() }) {
                     Text("Annulla")
                 }
             }
@@ -225,14 +222,13 @@ fun GruppoCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Cerchio Avatar Intelligente: Integra le icone selezionate da AvatarProvider
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.primaryContainer,
                 modifier = Modifier.size(48.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    // USO DELL'AVATAR PROVIDER
-                    // Mostra l'icona scelta o quella di default se l'indice non è valido
                     AvatarProvider.DisplayAvatar(
                         avatar = AvatarProvider.getAvatar(gruppo.avatarIndex),
                         contentDescription = null,
