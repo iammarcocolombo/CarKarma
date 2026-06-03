@@ -1,5 +1,8 @@
 package it.col.mar.android.carkarma.presentation
 
+import android.app.Activity
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,6 +26,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -32,7 +36,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import it.col.mar.android.carkarma.R
 import it.col.mar.android.carkarma.data.model.UserData
-
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,11 +51,36 @@ fun AppScaffold(
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
     val navBackStackEntry = navController?.currentBackStackEntryAsState()?.value
     val currentRoute = navBackStackEntry?.destination?.route
     val showBars = currentRoute != "login" && currentRoute != null && currentRoute != "splash"
+
+    // --- GESTIONE TASTO INDIETRO (BACK HANDLER) ---
+    var backPressedOnce by remember { mutableStateOf(false) }
+
+    // Si attiva SOLO se il drawer è aperto OPPURE se siamo nella Home
+    BackHandler(enabled = drawerState.isOpen || currentRoute == "home") {
+        if (drawerState.isOpen) {
+            // Se il drawer è aperto, il tasto indietro lo chiude semplicemente
+            scope.launch { drawerState.close() }
+        } else if (currentRoute == "home") {
+            // Se siamo in home e il drawer è chiuso, gestiamo il doppio tap per uscire
+            if (backPressedOnce) {
+                (context as? Activity)?.finish() // Chiude l'app
+            } else {
+                backPressedOnce = true
+                Toast.makeText(context, "Premi di nuovo per uscire", Toast.LENGTH_SHORT).show()
+                // Avvia un timer: se non premi di nuovo entro 2 secondi, resetta lo stato
+                scope.launch {
+                    delay(2000)
+                    backPressedOnce = false
+                }
+            }
+        }
+    }
 
     // TRUCCO PER IL DRAWER A DESTRA (END DRAWER)
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -116,7 +145,6 @@ fun AppScaffold(
                                 modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                             )
 
-                            // NUOVA VOCE: CREDITI
                             NavigationDrawerItem(
                                 label = { Text("Crediti e Licenze") },
                                 selected = false,
@@ -179,7 +207,6 @@ fun AppScaffold(
                                         )
                                     },
                                     actions = {
-                                        // Icona Profilo a DESTRA che apre il Drawer
                                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                                             Icon(
                                                 imageVector = Icons.Default.AccountCircle,
@@ -195,8 +222,6 @@ fun AppScaffold(
                             }
                         }
                     ) { paddingValues ->
-                        // APPLICHIAMO IL PADDING QUI!
-                        // In questo modo tutte le schermate figlie sono protette dalle barre automaticamente
                         Box(modifier = Modifier.padding(paddingValues)) {
                             content(paddingValues)
                         }
@@ -208,13 +233,20 @@ fun AppScaffold(
 
     if (showDeleteConfirmDialog) {
         AlertDialog(
-            onDismissRequest = { },
+            onDismissRequest = { showDeleteConfirmDialog = false },
             title = { Text("Eliminare l'account?") },
             text = { Text("Questa azione è irreversibile. I tuoi dati personali verranno rimossi, ma i dati nei gruppi condivisi potrebbero rimanere visibili agli altri membri per mantenere lo storico.") },
             confirmButton = {
                 Button(
                     onClick = {
-                        onDeleteAccount()
+                        showDeleteConfirmDialog = false
+                        // FIX: Attendiamo che l'animazione di chiusura del Dialog sia
+                        // completata prima di scatenare l'evento pesante di eliminazione
+                        // che resetterà il NavHost. Evita che il Dialog rimanga bloccato a schermo!
+                        scope.launch {
+                            delay(300)
+                            onDeleteAccount()
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
@@ -222,7 +254,7 @@ fun AppScaffold(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { }) { Text("Annulla") }
+                TextButton(onClick = { showDeleteConfirmDialog = false }) { Text("Annulla") }
             },
             icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) }
         )

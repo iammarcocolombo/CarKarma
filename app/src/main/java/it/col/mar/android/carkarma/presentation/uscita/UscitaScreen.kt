@@ -54,15 +54,9 @@ fun UscitaScreen(
     var showEliminaDialog by remember { mutableStateOf(false) }
     val isEditing = uscitaId.isNotEmpty()
 
-    val sheetState = rememberModalBottomSheetState()
-    var showSuggestionSheet by remember { mutableStateOf(false) }
+    // Ottimizzazione: Rimosso lo stato doppio "showSuggestionSheet" per evitare loop e freeze
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
-
-    LaunchedEffect(suggerimento) {
-        if (suggerimento != null) {
-            showSuggestionSheet = true
-        }
-    }
 
     val isFormValid = nomeUscita.isNotBlank() && kmTotali > 0 &&
             partecipantiSelezionati.isNotEmpty() &&
@@ -82,7 +76,7 @@ fun UscitaScreen(
         ) {
             Text(
                 text = if (isEditing) "Modifica Uscita" else "Nuova Uscita",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 24.dp, top = 0.dp)
@@ -304,9 +298,11 @@ fun UscitaScreen(
         }
     }
 
-    if (showSuggestionSheet) {
+    // --- FIX FREEZE: Mostriamo il ModalBottomSheet basandoci ESCLUSIVAMENTE sullo stato del ViewModel ---
+    if (suggerimento != null) {
         ModalBottomSheet(
             onDismissRequest = {
+                // Rimosso lo state locale. Azzerando il suggerimento, il componente scompare in modo sicuro.
                 viewModel.resetSuggerimento()
             },
             sheetState = sheetState
@@ -346,6 +342,7 @@ fun UscitaScreen(
 
                 Button(
                     onClick = {
+                        // Chiude prima graficamente il menu, e quando l'animazione finisce azzera lo stato!
                         scope.launch { sheetState.hide() }.invokeOnCompletion {
                             viewModel.resetSuggerimento()
                         }
@@ -370,16 +367,16 @@ fun UscitaScreen(
 
     if (showEliminaDialog) {
         AlertDialog(
-            onDismissRequest = { },
+            onDismissRequest = { showEliminaDialog = false },
             title = { Text("Eliminare?") },
             text = { Text("L'operazione è irreversibile e i km verranno rimossi dalle statistiche.") },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.eliminaUscita { navController.popBackStack() } },
+                    onClick = { viewModel.eliminaUscita { navController.popBackStack() }; showEliminaDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Elimina") }
             },
-            dismissButton = { TextButton(onClick = { }) { Text("Annulla") } }
+            dismissButton = { TextButton(onClick = { showEliminaDialog = false }) { Text("Annulla") } }
         )
     }
 }

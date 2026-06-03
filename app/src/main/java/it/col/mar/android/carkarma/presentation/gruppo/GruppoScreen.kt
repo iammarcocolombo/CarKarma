@@ -53,7 +53,6 @@ fun GruppoScreen(
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
-    var showShareSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
     var showLeaveDialog by remember { mutableStateOf(false) }
@@ -157,7 +156,9 @@ fun GruppoScreen(
                         Icon(Icons.Default.BarChart, "Statistiche", tint = MaterialTheme.colorScheme.tertiary)
                     }
 
-                    IconButton(onClick = { showShareSheet = true }) {
+                    IconButton(onClick = {
+                        scope.launch { sheetState.show() }
+                    }) {
                         Icon(Icons.Default.Share, "Invita", tint = MaterialTheme.colorScheme.primary)
                     }
 
@@ -230,9 +231,11 @@ fun GruppoScreen(
         )
     }
 
-    if (showShareSheet && gruppo != null) {
+    if (sheetState.isVisible && gruppo != null) {
         ModalBottomSheet(
-            onDismissRequest = { showShareSheet = false },
+            onDismissRequest = {
+                scope.launch { sheetState.hide() }
+            },
             sheetState = sheetState
         ) {
             Column(
@@ -309,7 +312,9 @@ fun GruppoScreen(
                             putExtra(Intent.EXTRA_TEXT, "Unisciti al mio gruppo su CarKarma! Usa questo codice:\n\n${gruppo!!.id}")
                         }
                         context.startActivity(Intent.createChooser(shareIntent, "Invia codice..."))
-                        scope.launch { sheetState.hide() }.invokeOnCompletion {showShareSheet = false}
+                        scope.launch {
+                            sheetState.hide()
+                        }
                     },
                     modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) {
@@ -323,7 +328,9 @@ fun GruppoScreen(
 
     if (showLeaveDialog) {
         AlertDialog(
-            onDismissRequest = { showShareSheet = false },
+            onDismissRequest = {
+                showLeaveDialog = false
+            },
             title = { Text("Lasciare il gruppo?") },
             text = { Text("Se esci, non vedrai più questo gruppo nella tua Home, ma i dati non verranno cancellati per gli altri partecipanti.") },
             confirmButton = {
@@ -334,7 +341,11 @@ fun GruppoScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Lascia Gruppo") }
             },
-            dismissButton = { TextButton(onClick = { }) { Text("Annulla") } }
+            dismissButton = {
+                TextButton(onClick = { showLeaveDialog = false }) {
+                    Text("Annulla")
+                }
+            }
         )
     }
 }

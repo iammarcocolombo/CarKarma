@@ -11,16 +11,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
+/**
+ * Implementazione reale di AmicoRepository con persistenza Cloud Firestore.
+ * Aggiornato per riflettere le corrette firme suspend del Domain Layer.
+ */
 class AmicoRepositoryImpl(
     private val db: FirebaseFirestore,
     private val auth: FirebaseAuth
-) : AmicoRepository { // Implementa l'interfaccia definita nel dominio
-
+) : AmicoRepository {
     private val _amici = MutableStateFlow<List<Amico>>(emptyList())
     override val amici: StateFlow<List<Amico>> = _amici.asStateFlow()
 
     init {
-        // Ascolto in tempo reale dei cambiamenti su Firestore
         auth.addAuthStateListener { firebaseAuth ->
             val userId = firebaseAuth.currentUser?.uid
             if (userId != null) {
@@ -39,14 +41,27 @@ class AmicoRepositoryImpl(
 
     override fun getTuttiGliAmici(): List<Amico> = _amici.value
 
-    override fun getAmicoPerId(id: String): Amico? {
-        return _amici.value.find { it.id == id }
+    override suspend fun getAmicoPerId(id: String): Amico? {
+        val local = _amici.value.find { it.id == id }
+        if (local != null) return local
+
+        val userId = auth.currentUser?.uid ?: return null
+        return try {
+            db.collection("users").document(userId).collection("amici")
+                .document(id)
+                .get()
+                .await()
+                .toObject(Amico::class.java)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 
     override suspend fun aggiungiAmico(amico: Amico) {
         val userId = auth.currentUser?.uid ?: return
 
-        val idFinale = amico.id.ifEmpty { UUID.randomUUID().toString() }
+        val idFinale = if (amico.id.isEmpty()) UUID.randomUUID().toString() else amico.id
         val amicoDaSalvare = amico.copy(id = idFinale)
 
         try {
@@ -79,6 +94,21 @@ class AmicoRepositoryImpl(
                 .document(amicoId)
                 .delete()
                 .await()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // CORREZIONE CHIAVE: Trasformata in una funzione suspend robusta ed esente da leak di memoria
+    override suspend fun aggiornaStatisticheAmico(amicoId: String, kmAggiunti: Int, haGuidato: Boolean) {
+        try {
+            val amico = getAmicoPerId(amicoId) ?: return
+            val amicoAggiornato = amico.copy(
+                uscite = amico.uscite + 1,
+                guide = if (haGuidato) amico.guide + 1 else amico.guide,
+                km = if (haGuidato) amico.km + kmAggiunti else amico.km
+            )
+            aggiungiAmico(amicoAggiornato)
         } catch (e: Exception) {
             e.printStackTrace()
         }

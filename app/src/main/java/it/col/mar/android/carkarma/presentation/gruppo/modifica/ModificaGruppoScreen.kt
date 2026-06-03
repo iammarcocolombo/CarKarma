@@ -49,8 +49,6 @@ fun ModificaGruppoScreen(
             .padding(horizontal = 16.dp)
             .padding(bottom = 16.dp)
     ) {
-        // --- HEADER COMPATTO CON TASTO INDIETRO ---
-        // Allineato stilisticamente con tutte le altre schermate di CarKarma
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -91,7 +89,6 @@ fun ModificaGruppoScreen(
             }
         }
 
-        // Campo Nome
         OutlinedTextField(
             value = nomeGruppo,
             onValueChange = { viewModel.onNomeGruppoChange(it) },
@@ -101,7 +98,6 @@ fun ModificaGruppoScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- SELETTORE AVATAR ---
         Text("Scegli un'icona:", style = MaterialTheme.typography.labelLarge)
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -140,7 +136,6 @@ fun ModificaGruppoScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // --- LISTA AMICI ---
         Text(
             text = "Seleziona Amici",
             style = MaterialTheme.typography.titleMedium,
@@ -169,7 +164,9 @@ fun ModificaGruppoScreen(
                     )
 
                     IconButton(onClick = {
-                        navController.navigate("amico?amicoId=${amico.id}&gruppoId=$gruppoId")
+                        // Modifica amico passando SEMPRE stringhe vuote se i valori mancano
+                        val gid = if (gruppoId.isEmpty()) "" else gruppoId
+                        navController.navigate("amico?amicoId=${amico.id}&gruppoId=$gid")
                     }) {
                         Icon(Icons.Default.Edit, contentDescription = "Modifica Amico")
                     }
@@ -179,9 +176,8 @@ fun ModificaGruppoScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Tasto Nuovo Amico
         Button(
-            onClick = { navController.navigate("amico") },
+            onClick = { navController.navigate("amico?amicoId=&gruppoId=") },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
         ) {
@@ -192,7 +188,6 @@ fun ModificaGruppoScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Tasto Salva
         Button(
             onClick = {
                 viewModel.salvaGruppo {
@@ -208,7 +203,7 @@ fun ModificaGruppoScreen(
 
     if (showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = { },
+            onDismissRequest = { showDeleteDialog = false },
             title = { Text("Eliminare il gruppo?") },
             text = { Text("Sei sicuro? Verranno eliminate anche tutte le uscite associate.") },
             confirmButton = {
@@ -217,11 +212,12 @@ fun ModificaGruppoScreen(
                         viewModel.eliminaGruppo {
                             navController.navigate("home") { popUpTo("home") { inclusive = true } }
                         }
+                        showDeleteDialog = false
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Elimina") }
             },
-            dismissButton = { TextButton(onClick = { }) { Text("Annulla") } }
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Annulla") } }
         )
     }
 }

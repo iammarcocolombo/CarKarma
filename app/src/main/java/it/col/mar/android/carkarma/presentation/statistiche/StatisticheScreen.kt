@@ -68,7 +68,7 @@ fun StatisticheScreen(
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = "Statistiche $nomeGruppo",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )

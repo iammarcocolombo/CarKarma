@@ -190,7 +190,8 @@ fun CarKarmaNavHost(
             val vm: UscitaViewModel = viewModel(
                 factory = UscitaViewModelFactory(
                     AppContainer.uscitaRepository,
-                    AppContainer.gruppoRepository
+                    AppContainer.gruppoRepository,
+                    AppContainer.carburanteRepository
                 )
             )
             UscitaScreen(navController, gruppoId, uscitaId, vm)

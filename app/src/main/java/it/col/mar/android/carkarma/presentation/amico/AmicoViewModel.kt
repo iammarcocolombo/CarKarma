@@ -2,10 +2,9 @@ package it.col.mar.android.carkarma.presentation.amico
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import it.col.mar.android.carkarma.domain.repository.AmicoRepository // CORRETTO
-import it.col.mar.android.carkarma.domain.repository.GruppoRepository // CORRETTO
+import it.col.mar.android.carkarma.domain.repository.AmicoRepository
+import it.col.mar.android.carkarma.domain.repository.GruppoRepository
 import it.col.mar.android.carkarma.data.model.Amico
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -32,15 +31,18 @@ class AmicoViewModel(
     private var currentGruppoId: String = ""
 
     fun loadAmico(id: String, gruppoId: String) {
-        this.currentAmicoId = id
-        this.currentGruppoId = gruppoId
+        val idPulito = if (id == "{amicoId}" || id == "null" || id.isBlank()) "" else id
+        val gruppoIdPulito = if (gruppoId == "{gruppoId}" || gruppoId == "null" || gruppoId.isBlank()) "" else gruppoId
+
+        this.currentAmicoId = idPulito
+        this.currentGruppoId = gruppoIdPulito
 
         viewModelScope.launch {
-            if (id.isNotEmpty()) {
-                val amico = if (gruppoId.isNotEmpty()) {
-                    gruppoRepository.getMembro(gruppoId, id)
+            if (idPulito.isNotEmpty()) {
+                val amico = if (gruppoIdPulito.isNotEmpty()) {
+                    gruppoRepository.getMembro(gruppoIdPulito, idPulito) ?: amicoRepository.getAmicoPerId(idPulito)
                 } else {
-                    amicoRepository.getAmicoPerId(id)
+                    amicoRepository.getAmicoPerId(idPulito)
                 }
 
                 amico?.let {
@@ -91,7 +93,32 @@ class AmicoViewModel(
                                 consumoMedio = consumo
                             )
                             gruppoRepository.aggiornaAnagraficaMembro(currentGruppoId, amicoAggiornato)
+                            amicoRepository.aggiungiAmico(amicoAggiornato)
+                        } else {
+                            val amicoRubrica = amicoRepository.getAmicoPerId(currentAmicoId)
+                            if (amicoRubrica != null) {
+                                val amicoAggiornato = amicoRubrica.copy(
+                                    nome = _nome.value,
+                                    postiAuto = posti,
+                                    tipoCarburante = _tipoCarburante.value,
+                                    consumoMedio = consumo
+                                )
+                                amicoRepository.aggiungiAmico(amicoAggiornato)
+                            }
                         }
+                    } else {
+                        val nuovoAmico = Amico(
+                            id = UUID.randomUUID().toString(),
+                            nome = _nome.value,
+                            postiAuto = posti,
+                            tipoCarburante = _tipoCarburante.value,
+                            consumoMedio = consumo,
+                            uscite = 0,
+                            guide = 0,
+                            km = 0
+                        )
+                        amicoRepository.aggiungiAmico(nuovoAmico)
+                        gruppoRepository.aggiungiMembroAlGruppo(currentGruppoId, nuovoAmico)
                     }
                 } else {
                     val amicoBase = if (currentAmicoId.isNotEmpty()) {
@@ -103,24 +130,22 @@ class AmicoViewModel(
                         postiAuto = posti,
                         tipoCarburante = _tipoCarburante.value,
                         consumoMedio = consumo
+                    ) ?: Amico(
+                        id = if (currentAmicoId.isNotEmpty()) currentAmicoId else UUID.randomUUID().toString(),
+                        nome = _nome.value,
+                        postiAuto = posti,
+                        tipoCarburante = _tipoCarburante.value,
+                        consumoMedio = consumo,
+                        uscite = 0,
+                        guide = 0,
+                        km = 0
                     )
-                        ?: Amico(
-                            id = currentAmicoId.ifEmpty { UUID.randomUUID().toString() },
-                            nome = _nome.value,
-                            postiAuto = posti,
-                            tipoCarburante = _tipoCarburante.value,
-                            consumoMedio = consumo,
-                            uscite = 0,
-                            guide = 0,
-                            km = 0
-                        )
                     amicoRepository.aggiungiAmico(amicoDaSalvare)
                 }
-
-                delay(200)
                 onFinito()
             } catch (e: Exception) {
                 e.printStackTrace()
+                onFinito()
             }
         }
     }
@@ -129,16 +154,15 @@ class AmicoViewModel(
         viewModelScope.launch {
             try {
                 if (currentAmicoId.isNotEmpty()) {
+                    amicoRepository.rimuoviAmico(currentAmicoId)
                     if (currentGruppoId.isNotEmpty()) {
                         gruppoRepository.rimuoviMembroDalGruppo(currentGruppoId, currentAmicoId)
-                    } else {
-                        amicoRepository.rimuoviAmico(currentAmicoId)
                     }
                 }
-                delay(200)
                 onEliminato()
             } catch (e: Exception) {
                 e.printStackTrace()
+                onEliminato()
             }
         }
     }
