@@ -156,7 +156,12 @@ fun StatisticheScreen(
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
                 items(classifica) { stat ->
-                    ClassificaItem(stat)
+                    ClassificaItem(
+                        stat = stat,
+                        onClickItem = {
+                            navController.navigate("dettaglio_karma/$gruppoId/${stat.amico.id}")
+                        }
+                    )
                 }
             }
         }
@@ -182,8 +187,12 @@ fun StatBubble(label: String, value: String, icon: ImageVector, color: Color) {
 }
 
 @Composable
-fun ClassificaItem(stat: StatisticaMembro) {
+fun ClassificaItem(
+    stat: StatisticaMembro,
+    onClickItem: () -> Unit
+) {
     Card(
+        onClick = onClickItem, // Abilita il click nativo M3 sulla riga del membro
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -229,13 +238,14 @@ fun ClassificaItem(stat: StatisticaMembro) {
             }
             Spacer(modifier = Modifier.height(8.dp))
             LinearProgressIndicator(
-                progress = stat.percentuale,
+                progress = { stat.percentuale },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
                     .clip(CircleShape),
                 color = if (stat.isSanto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
             )
         }
     }

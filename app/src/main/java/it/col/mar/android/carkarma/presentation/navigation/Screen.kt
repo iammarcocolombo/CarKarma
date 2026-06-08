@@ -34,8 +34,13 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
         }
     }
 
-    // 5. Dettaglio Amico
+    /// 5. Dettaglio Amico
     data object Amico : Screen("amico?amicoId={amicoId}", "Profilo Amico", Icons.Default.Person) {
         fun createRoute(amicoId: String = "") = "amico?amicoId=$amicoId"
+    }
+
+    // 6. NUOVA ROTTA: Dettaglio Karma Incrociato
+    data object DettaglioKarma : Screen("dettaglio_karma/{gruppoId}/{componenteId}", "Dettaglio Karma") {
+        fun createRoute(gruppoId: String, componenteId: String) = "dettaglio_karma/$gruppoId/$componenteId"
     }
 }

@@ -17,6 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import it.col.mar.android.carkarma.data.database.AppContainer
+import it.col.mar.android.carkarma.data.database.AppContainer.gruppoRepository
 
 import it.col.mar.android.carkarma.domain.repository.AuthRepository
 import it.col.mar.android.carkarma.data.model.UserData
@@ -38,6 +39,9 @@ import it.col.mar.android.carkarma.presentation.privacy.PrivacyScreen
 import it.col.mar.android.carkarma.presentation.statistiche.StatisticheScreen
 import it.col.mar.android.carkarma.presentation.statistiche.StatisticheViewModel
 import it.col.mar.android.carkarma.presentation.statistiche.StatisticheViewModelFactory
+import it.col.mar.android.carkarma.presentation.statistiche.dettaglio.DettaglioKarmaScreen
+import it.col.mar.android.carkarma.presentation.statistiche.dettaglio.DettaglioKarmaViewModel
+import it.col.mar.android.carkarma.presentation.statistiche.dettaglio.DettaglioKarmaViewModelFactory
 import it.col.mar.android.carkarma.presentation.uscita.UscitaScreen
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModel
 import it.col.mar.android.carkarma.presentation.uscita.UscitaViewModelFactory
@@ -195,6 +199,21 @@ fun CarKarmaNavHost(
                 )
             )
             UscitaScreen(navController, gruppoId, uscitaId, vm)
+        }
+        composable("dettaglio_karma/{gruppoId}/{componenteId}") { backStackEntry ->
+            val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
+            val componenteId = backStackEntry.arguments?.getString("componenteId") ?: ""
+
+            // Inizializzazione pulita tramite Factory dedicata
+            val factory = DettaglioKarmaViewModelFactory(gruppoRepository)
+            val dettaglioViewModel: DettaglioKarmaViewModel = viewModel(factory = factory)
+
+            DettaglioKarmaScreen(
+                navController = navController,
+                gruppoId = gruppoId,
+                componenteId = componenteId,
+                viewModel = dettaglioViewModel
+            )
         }
     }
 }
