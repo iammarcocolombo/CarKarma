@@ -1,5 +1,6 @@
 package it.col.mar.android.carkarma.presentation.statistiche
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -8,10 +9,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.*
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -41,6 +43,9 @@ fun StatisticheScreen(
     val nUscite by viewModel.numeroUscite.collectAsState()
     val media by viewModel.mediaKm.collectAsState()
     val classifica by viewModel.classifica.collectAsState()
+    val isRecalculating by viewModel.isRecalculating.collectAsState()
+
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -48,7 +53,7 @@ fun StatisticheScreen(
             .padding(horizontal = 16.dp)
             .padding(bottom = 16.dp)
     ) {
-        // --- HEADER COMPATTO (Sostituisce la TopAppBar) ---
+        // --- HEADER COMPATTO ---
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -68,10 +73,30 @@ fun StatisticheScreen(
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = "Statistiche $nomeGruppo",
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f)
             )
+
+            // --- PULSANTE DI RICALCOLO AUTOMATICO STORICO ---
+            if (isRecalculating) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            } else {
+                IconButton(
+                    onClick = {
+                        viewModel.ricalcolaTuttoLoStorico(gruppoId) {
+                            Toast.makeText(context, "Storico ricalcolato con successo! 🎉", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Ricalcola tutto",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         }
 
         // --- HEADER BOLLE ---
@@ -203,17 +228,14 @@ fun ClassificaItem(stat: StatisticaMembro) {
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
-            // CORRETTO: Sostituito la lambda progress = { stat.percentuale } con il semplice Float stat.percentuale
-            // per garantire la compilazione con il BOM di Compose 2024.04.01 (M3 < 1.3.0)
             LinearProgressIndicator(
-            progress = { stat.percentuale },
-            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(CircleShape),
-            color = if (stat.isSanto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-            trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
+                progress = stat.percentuale,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(CircleShape),
+                color = if (stat.isSanto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
             )
         }
     }

@@ -20,10 +20,6 @@ import java.net.URL
 import java.net.URLEncoder
 import java.util.Locale
 
-/**
- * ViewModel per la gestione delle Uscite (creazione e modifica).
- * Utilizza unicamente le interfacce definite nel Domain Layer per l'accesso ai dati.
- */
 class UscitaViewModel(
     private val uscitaRepository: UscitaRepository,
     private val gruppoRepository: GruppoRepository,
@@ -238,7 +234,7 @@ class UscitaViewModel(
 
         viewModelScope.launch {
             val nuovaUscita = Uscita(
-                id = currentUscitaId.ifEmpty { "" },
+                id = if (currentUscitaId.isEmpty()) "" else currentUscitaId,
                 nome = _nomeUscita.value,
                 gruppoId = currentGruppoId,
                 partecipantiIds = _partecipantiSelezionati.value.toList(),
@@ -253,65 +249,77 @@ class UscitaViewModel(
 
             if (currentUscitaId.isEmpty()) {
                 uscitaRepository.aggiungiUscita(nuovaUscita)
-                applicaStatistiche(nuovaUscita, prezzi)
+                elaboraStatisticheP2P(nuovaUscita, prezzi, isRevert = false)
             } else {
-                originalUscita?.let { revertStatistiche(it, prezzi) }
+                originalUscita?.let { elaboraStatisticheP2P(it, prezzi, isRevert = true) }
                 uscitaRepository.aggiornaUscita(nuovaUscita)
-                applicaStatistiche(nuovaUscita, prezzi)
+                elaboraStatisticheP2P(nuovaUscita, prezzi, isRevert = false)
             }
             onSalvato()
         }
     }
 
-    private fun applicaStatistiche(u: Uscita, prezzi: Map<String, Double>) {
-        u.partecipantiIds.forEach { id ->
-            val amico = _amiciDelGruppo.value.find { it.id == id }
-            val haGuidato = u.guidatoriIds.contains(id)
+    private suspend fun elaboraStatisticheP2P(u: Uscita, prezzi: Map<String, Double>, isRevert: Boolean) {
+        val numPartecipanti = u.partecipantiIds.size
+        if (numPartecipanti == 0) return
+
+        val multiplier = if (isRevert) -1.0 else 1.0
+        val statMultiplier = if (isRevert) -1 else 1
+
+        Log.d("CarKarmaP2P", "--- INIZIO CALCOLO P2P --- Uscita: ${u.nome} (Revert: $isRevert)")
+
+        // 1. Calcoliamo quanto ha speso (in Euro) ciascun guidatore per questo viaggio
+        val quoteGuidatori = u.guidatoriIds.mapNotNull { dId ->
+            val driver = _amiciDelGruppo.value.find { it.id == dId } ?: return@mapNotNull null
+            val costoKm = calcoloUseCase.calcolaCostoChilometrico(driver, prezzi)
+            val spesaTotaleDriver = u.kmTotali * costoKm
+            val quotaSingolaA_Testa = spesaTotaleDriver / numPartecipanti
+
+            Log.d("CarKarmaP2P", "Guidatore: ${driver.nome}, Spesa Reale: $spesaTotaleDriver €, Quota/Passeggero: $quotaSingolaA_Testa €")
+            dId to quotaSingolaA_Testa
+        }
+
+        // 2. Aggiorniamo le statistiche e i bilanci di ciascun partecipante
+        u.partecipantiIds.forEach { pId ->
+            val haGuidato = u.guidatoriIds.contains(pId)
             val kmFisici = if (haGuidato) u.kmTotali else 0
 
-            var euroSpesi = 0.0
-            if (haGuidato && amico != null) {
-                val costoKm = calcoloUseCase.calcolaCostoChilometrico(amico, prezzi)
-                euroSpesi = kmFisici * costoKm
+            var karmaLegacy = 0.0
+            val deltaBilanci = mutableMapOf<String, Double>()
+
+            for ((dId, quota) in quoteGuidatori) {
+                if (pId == dId) {
+                    karmaLegacy += (quota * numPartecipanti)
+                    u.partecipantiIds.forEach { altroId ->
+                        if (altroId != pId) {
+                            deltaBilanci[altroId] = (deltaBilanci[altroId] ?: 0.0) + (quota * multiplier)
+                        }
+                    }
+                } else {
+                    deltaBilanci[dId] = (deltaBilanci[dId] ?: 0.0) - (quota * multiplier)
+                }
             }
 
-            gruppoRepository.aggiornaStatisticheMembro(
-                currentGruppoId, id,
-                deltaUscite = 1,
-                deltaGuide = if (haGuidato) 1 else 0,
-                deltaKm = kmFisici,
-                deltaKarma = euroSpesi
+            Log.d("CarKarmaP2P", "Amico ID ($pId) - Modifiche P2P generate: $deltaBilanci")
+
+            gruppoRepository.aggiornaStatisticheMembroP2P(
+                gruppoId = currentGruppoId,
+                amicoId = pId,
+                deltaUscite = 1 * statMultiplier,
+                deltaGuide = (if (haGuidato) 1 else 0) * statMultiplier,
+                deltaKm = kmFisici * statMultiplier,
+                deltaKarma = karmaLegacy * multiplier,
+                deltaBilanci = deltaBilanci
             )
         }
-    }
-
-    private fun revertStatistiche(u: Uscita, prezzi: Map<String, Double>) {
-        u.partecipantiIds.forEach { id ->
-            val amico = _amiciDelGruppo.value.find { it.id == id }
-            val haGuidato = u.guidatoriIds.contains(id)
-            val kmFisici = if (haGuidato) u.kmTotali else 0
-
-            var euroDaTogliere = 0.0
-            if (haGuidato && amico != null) {
-                val costoKm = calcoloUseCase.calcolaCostoChilometrico(amico, prezzi)
-                euroDaTogliere = kmFisici * costoKm
-            }
-
-            gruppoRepository.aggiornaStatisticheMembro(
-                currentGruppoId, id,
-                deltaUscite = -1,
-                deltaGuide = if (haGuidato) -1 else 0,
-                deltaKm = -kmFisici,
-                deltaKarma = -euroDaTogliere
-            )
-        }
+        Log.d("CarKarmaP2P", "--- FINE CALCOLO P2P ---")
     }
 
     fun eliminaUscita(onEliminato: () -> Unit) {
         viewModelScope.launch {
             if (currentUscitaId.isNotEmpty()) {
                 val prezzi = carburanteRepository.getPrezziAggiornati()
-                originalUscita?.let { revertStatistiche(it, prezzi) }
+                originalUscita?.let { elaboraStatisticheP2P(it, prezzi, isRevert = true) }
                 uscitaRepository.eliminaUscita(currentGruppoId, currentUscitaId)
             }
             onEliminato()

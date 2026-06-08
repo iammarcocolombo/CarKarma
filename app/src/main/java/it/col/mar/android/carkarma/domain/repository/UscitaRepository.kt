@@ -11,4 +11,5 @@ interface UscitaRepository {
     fun aggiornaUscita(uscita: Uscita)
     fun eliminaUscita(gruppoId: String, uscitaId: String)
     fun eliminaTutteUsciteDelGruppo(gruppoId: String)
+
 }

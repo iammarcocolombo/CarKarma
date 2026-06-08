@@ -5,16 +5,18 @@ data class Amico(
     val nome: String = "",
     val postiAuto: Int = 5,
 
-    // Statistiche
     val uscite: Int = 0,
     val guide: Int = 0,
-    val km: Int = 0, // Km fisici percorsi (per curiosità storica)
+    val km: Int = 0,
 
-    // NUOVO: Punteggio Economico Accumulato ("Salvadanaio")
-    // Questo valore cresce viaggio dopo viaggio in base all'auto che avevi IN QUEL MOMENTO.
+    // Manteniamo il Karma per visualizzare una statistica totale "semplice"
     val karma: Double = 0.0,
 
-    // Dati Auto Attuali (usati solo per i NUOVI viaggi)
+    // --- NUOVO CAMPO: MATRICE DEI BILANCI ---
+    // Chiave: ID dell'altro amico.
+    // Valore: Quanti Euro (Positivo = Sono in credito con lui, Negativo = Sono in debito con lui)
+    val bilanci: Map<String, Double> = emptyMap(),
+
     val tipoCarburante: String = "Benzina",
     val consumoMedio: Double = 0.0
 )

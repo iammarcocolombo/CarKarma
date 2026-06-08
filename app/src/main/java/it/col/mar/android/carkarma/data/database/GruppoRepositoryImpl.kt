@@ -4,6 +4,7 @@ import android.net.Uri
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.toObjects
 import com.google.firebase.storage.FirebaseStorage
 import it.col.mar.android.carkarma.data.model.Amico
 import it.col.mar.android.carkarma.data.model.Gruppo
@@ -36,14 +37,13 @@ class GruppoRepositoryImpl(
     init {
         auth.addAuthStateListener { firebaseAuth ->
             val userId = firebaseAuth.currentUser?.uid
-
             if (userId != null) {
                 db.collection("gruppi")
                     .whereArrayContains("utentiIds", userId)
                     .addSnapshotListener { snapshot, e ->
                         if (e != null) return@addSnapshotListener
                         if (snapshot != null) {
-                            _gruppi.value = snapshot.toObjects(Gruppo::class.java)
+                            _gruppi.value = snapshot.toObjects<Gruppo>()
                             _isDataLoaded.value = true
                         }
                     }
@@ -60,7 +60,7 @@ class GruppoRepositoryImpl(
             try {
                 val snapshot = db.collection("gruppi").document(gruppo.id)
                     .collection("membri").get().await()
-                val membriDelGruppo = snapshot.toObjects(Amico::class.java)
+                val membriDelGruppo = snapshot.toObjects<Amico>()
                 if (membriDelGruppo.isNotEmpty()) {
                     amicoRepository.importaAmici(membriDelGruppo)
                 }
@@ -80,7 +80,7 @@ class GruppoRepositoryImpl(
         val registration = db.collection("gruppi").document(gruppoId).collection("membri")
             .addSnapshotListener { snapshot, e ->
                 if (e != null) { close(e); return@addSnapshotListener }
-                if (snapshot != null) { trySend(snapshot.toObjects(Amico::class.java)) }
+                if (snapshot != null) { trySend(snapshot.toObjects<Amico>()) }
             }
         awaitClose { registration.remove() }
     }
@@ -89,8 +89,8 @@ class GruppoRepositoryImpl(
         return try {
             val snapshot = db.collection("gruppi").document(gruppoId)
                 .collection("membri").get().await()
-            snapshot.toObjects(Amico::class.java)
-        } catch (_: Exception) { emptyList() }
+            snapshot.toObjects<Amico>()
+        } catch (e: Exception) { emptyList() }
     }
 
     override suspend fun getMembro(gruppoId: String, amicoId: String): Amico? {
@@ -98,11 +98,11 @@ class GruppoRepositoryImpl(
             val doc = db.collection("gruppi").document(gruppoId)
                 .collection("membri").document(amicoId).get().await()
             doc.toObject(Amico::class.java)
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { null }
     }
 
     override fun aggiungiMembroAlGruppo(gruppoId: String, amicoTemplate: Amico) {
-        val nuovoMembro = amicoTemplate.copy(uscite = 0, guide = 0, km = 0, karma = 0.0)
+        val nuovoMembro = amicoTemplate.copy(uscite = 0, guide = 0, km = 0, karma = 0.0, bilanci = emptyMap())
         db.collection("gruppi").document(gruppoId).collection("membri").document(nuovoMembro.id).set(nuovoMembro)
     }
 
@@ -123,15 +123,84 @@ class GruppoRepositoryImpl(
             val snapshot = transaction.get(docRef)
             val amico = snapshot.toObject(Amico::class.java) ?: return@runTransaction
 
-            val karmaAttuale = if (amico.karma != 0.0) amico.karma else amico.km.toDouble()
-
             val updates = mapOf(
                 "uscite" to (amico.uscite + deltaUscite).coerceAtLeast(0),
                 "guide" to (amico.guide + deltaGuide).coerceAtLeast(0),
                 "km" to (amico.km + deltaKm).coerceAtLeast(0),
-                "karma" to (karmaAttuale + deltaKarma).coerceAtLeast(0.0)
+                // IL KARMA PUÒ ANDARE IN NEGATIVO (DEBITO)
+                "karma" to (amico.karma + deltaKarma)
             )
             transaction.update(docRef, updates)
+        }
+    }
+
+    // CORREZIONE CHIAVE: Aggiunto try/catch con .await() finale per la transazione
+    override suspend fun aggiornaStatisticheMembroP2P(
+        gruppoId: String,
+        amicoId: String,
+        deltaUscite: Int,
+        deltaGuide: Int,
+        deltaKm: Int,
+        deltaKarma: Double,
+        deltaBilanci: Map<String, Double>
+    ) {
+        val docRef = db.collection("gruppi").document(gruppoId).collection("membri").document(amicoId)
+        try {
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(docRef)
+                val amico = snapshot.toObject(Amico::class.java) ?: return@runTransaction
+
+                // Fonde i vecchi bilanci con le nuove quote (crediti/debiti)
+                val nuoviBilanci = amico.bilanci.toMutableMap()
+                deltaBilanci.forEach { (altroId, importo) ->
+                    nuoviBilanci[altroId] = (nuoviBilanci[altroId] ?: 0.0) + importo
+                }
+
+                val karmaAttuale = if (amico.karma != 0.0) amico.karma else amico.km.toDouble()
+
+                val updates = mapOf(
+                    "uscite" to (amico.uscite + deltaUscite).coerceAtLeast(0),
+                    "guide" to (amico.guide + deltaGuide).coerceAtLeast(0),
+                    "km" to (amico.km + deltaKm).coerceAtLeast(0),
+                    // IL KARMA PUÒ ANDARE IN NEGATIVO, NIENTE coerceAtLeast(0.0)
+                    "karma" to (karmaAttuale + deltaKarma),
+                    "bilanci" to nuoviBilanci
+                )
+                transaction.update(docRef, updates)
+            }.await() // <--- MAGIA: Questo ferma la coroutine finché Firestore non ha effettivamente salvato!
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override suspend fun resetStatisticheMembri(gruppoId: String) {
+        try {
+            // Recupera tutti i documenti dei membri nel sottogruppo "membri"
+            val membriSnapshot = db.collection("gruppi").document(gruppoId)
+                .collection("membri").get().await()
+
+            // Se non ci sono membri, usciamo
+            if (membriSnapshot.isEmpty) return
+
+            // Utilizziamo un batch per aggiornare tutti i membri in un'unica operazione atomica
+            val batch = db.batch()
+
+            for (doc in membriSnapshot.documents) {
+                val resetData = mapOf(
+                    "uscite" to 0,
+                    "guide" to 0,
+                    "km" to 0,
+                    "karma" to 0.0,
+                    "bilanci" to emptyMap<String, Double>()
+                )
+                batch.update(doc.reference, resetData)
+            }
+
+            // Eseguiamo il commit del batch attendendone la conclusione
+            batch.commit().await()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            throw e
         }
     }
 

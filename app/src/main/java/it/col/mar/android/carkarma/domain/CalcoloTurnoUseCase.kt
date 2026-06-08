@@ -1,76 +1,60 @@
 package it.col.mar.android.carkarma.domain
 
 import it.col.mar.android.carkarma.data.model.Amico
-import kotlin.math.max
 
 class CalcoloTurnoUseCase {
 
     companion object {
-        // Standard abbassato a 6.0 L/100km (più realistico per le auto moderne)
-        private const val STANDARD_CONSUMO = 6.0
-        private const val STANDARD_PREZZO = 1.80 // Euro
+        private const val STANDARD_CONSUMO = 6.0 // L/100km
+        private const val STANDARD_PREZZO = 1.80 // Euro/L
     }
 
     /**
-     * QUERY: Calcola chi deve guidare basandosi sul Bilancio Economico (Euro).
-     * OPZIONE A: I guidatori non pagano il debito per quel viaggio, solo i passeggeri.
+     * QUERY: Calcola chi deve guidare basandosi sulla rete dei debiti "Peer-to-Peer" (stile Splitwise).
+     * Calcola il bilancio netto di ogni candidato SOLO verso le altre persone fisicamente presenti stasera.
      */
     fun calcolaChiGuida(
         membriGruppo: List<Amico>,
         presentiIds: Set<String>
     ): List<Pair<Amico, Double>> {
 
+        // 1. Isoliamo solo chi è fisicamente presente all'uscita di stasera
         val presenti = membriGruppo.filter { presentiIds.contains(it.id) }
         val numeroPersone = presenti.size
 
         if (numeroPersone == 0) return emptyList()
         if (numeroPersone == 1) return listOf(presenti.first() to 0.0)
 
-        // 1. Recuperiamo il Karma (che d'ora in poi rappresenta gli EURO spesi)
-        val mappaKarmaTotale = membriGruppo.associate { amico ->
-            val valoreKarmaReale = if (amico.karma != 0.0) amico.karma else amico.km.toDouble()
-            amico.id to valoreKarmaReale
-        }
+        // 2. Calcolo del Bilancio di Rete (Peer-to-Peer)
+        // Per ogni persona presente, calcoliamo il suo stato patrimoniale SOLO verso gli altri presenti.
+        val classificaBase = presenti.map { candidato ->
+            var bilancioNettoVersoIPresenti = 0.0
 
-        val totaleKarmaGruppo = mappaKarmaTotale.values.sum()
+            // Esaminiamo i debiti/crediti che questo candidato ha con gli altri presenti
+            for (altro in presenti) {
+                if (candidato.id != altro.id) {
+                    // Preleviamo il debito specifico verso l'altra persona.
+                    // Se positivo = l'altro mi deve soldi (credito). Se negativo = io devo soldi all'altro (debito).
+                    // Nota: 'bilanci' è la nuova mappa che aggiungeremo nel modello Amico.
+                    val saldoSpecifico = candidato.bilanci[altro.id] ?: 0.0
+                    bilancioNettoVersoIPresenti += saldoSpecifico
+                }
+            }
 
-        // 2. Calcolo dei Passeggeri Totali (Opzione A)
-        // Invece di dividere il costo per tutte le presenze, lo dividiamo solo per le volte
-        // in cui qualcuno si è seduto sul sedile del passeggero.
-        val presenzeTotaliGruppo = membriGruppo.sumOf { it.uscite }
-        val guideTotaliGruppo = membriGruppo.sumOf { it.guide }
-        val passeggeriTotali = presenzeTotaliGruppo - guideTotaliGruppo
+            candidato to bilancioNettoVersoIPresenti
+        }.sortedBy { it.second } // Ordiniamo dal più in debito (valore negativo) al più in credito (valore positivo)
 
-        // Quanto costa mediamente occupare un sedile da passeggero
-        val costoPerPasseggero = if (passeggeriTotali > 0) {
-            totaleKarmaGruppo / passeggeriTotali
-        } else {
-            0.0
-        }
-
-        // 3. Classifica Bilancio
-        // Bilancio = (Miei Euro Spesi per il gruppo) - (Mio debito accumulato scroccando passaggi)
-        val classificaBase = presenti.map { amico ->
-            val mioKarma = mappaKarmaTotale[amico.id] ?: 0.0
-
-            // Calcolo quante volte ha fatto il passeggero
-            val voltePasseggero = max(0, amico.uscite - amico.guide)
-            val mioDebito = voltePasseggero * costoPerPasseggero
-
-            val bilancio = mioKarma - mioDebito
-
-            amico to bilancio
-        }.sortedBy { it.second } // Ordinati dal più in debito (deve guidare) al più in credito
-
-        // --- FASE DECISIONALE DINAMICA ---
+        // --- FASE DECISIONALE DINAMICA (Capacità veicolo) ---
+        // Cerchiamo chi ha l'auto abbastanza grande partendo da chi è più in debito
         val candidatiUnici = classificaBase.filter { (amico, _) ->
             amico.postiAuto >= numeroPersone
         }
 
         if (candidatiUnici.isNotEmpty()) {
-            return listOf(candidatiUnici.first())
+            return candidatiUnici
         }
 
+        // Se nessuna auto singola basta, accumuliamo i guidatori necessari
         val guidatoriScelti = mutableListOf<Pair<Amico, Double>>()
         var postiCoperti = 0
 
@@ -85,17 +69,13 @@ class CalcoloTurnoUseCase {
 
     /**
      * COMMAND: Calcola il costo esatto in EURO per 1 solo Chilometro.
-     * Formula: (Consumo / 100) * Prezzo
      */
     fun calcolaCostoChilometrico(amico: Amico, prezzi: Map<String, Double>): Double {
         val consumoUtente = if (amico.consumoMedio > 0.0) amico.consumoMedio else STANDARD_CONSUMO
-
         val prezzoAlLitro = prezzi.entries
             .firstOrNull { it.key.equals(amico.tipoCarburante, ignoreCase = true) }
             ?.value ?: STANDARD_PREZZO
 
-        // Esempio: 6.0 L/100km -> 0.06 Litri al km.
-        // 0.06 * 1.80€ = 0.108 Euro al km.
         return (consumoUtente / 100.0) * prezzoAlLitro
     }
 }

@@ -6,10 +6,6 @@ import it.col.mar.android.carkarma.data.model.Gruppo
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
-/**
- * Interfaccia del Repository per la gestione dei Gruppi e dei relativi Membri.
- * Definita nel Domain Layer per rimuovere la dipendenza tecnologica dai ViewModels.
- */
 interface GruppoRepository {
     val gruppi: StateFlow<List<Gruppo>>
     val isDataLoaded: StateFlow<Boolean>
@@ -21,6 +17,7 @@ interface GruppoRepository {
     suspend fun getMembro(gruppoId: String, amicoId: String): Amico?
     fun aggiungiMembroAlGruppo(gruppoId: String, amicoTemplate: Amico)
     fun rimuoviMembroDalGruppo(gruppoId: String, amicoId: String)
+
     fun aggiornaStatisticheMembro(
         gruppoId: String,
         amicoId: String,
@@ -29,6 +26,20 @@ interface GruppoRepository {
         deltaKm: Int,
         deltaKarma: Double
     )
+
+    // GARANZIA ARCHITETTURALE: suspend per forzare l'attesa transazionale
+    suspend fun aggiornaStatisticheMembroP2P(
+        gruppoId: String,
+        amicoId: String,
+        deltaUscite: Int,
+        deltaGuide: Int,
+        deltaKm: Int,
+        deltaKarma: Double,
+        deltaBilanci: Map<String, Double>
+    )
+
+    suspend fun resetStatisticheMembri(gruppoId: String)
+
     fun aggiornaAnagraficaMembro(gruppoId: String, amico: Amico)
     fun getTuttiIGruppi(): List<Gruppo>
     fun getGruppoPerId(id: String): Gruppo?
