@@ -9,12 +9,8 @@ data class Amico(
     val guide: Int = 0,
     val km: Int = 0,
 
-    // Manteniamo il Karma per visualizzare una statistica totale "semplice"
-    val karma: Double = 0.0,
-
-    // --- NUOVO CAMPO: MATRICE DEI BILANCI ---
     // Chiave: ID dell'altro amico.
-    // Valore: Quanti Euro (Positivo = Sono in credito con lui, Negativo = Sono in debito con lui)
+    // Valore: positivo = sono in credito con lui, negativo = sono in debito con lui
     val bilanci: Map<String, Double> = emptyMap(),
 
     val tipoCarburante: String = "Benzina",

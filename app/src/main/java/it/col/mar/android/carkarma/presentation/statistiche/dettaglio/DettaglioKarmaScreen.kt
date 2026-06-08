@@ -8,8 +8,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.HorizontalRule
-import androidx.compose.material.icons.filled.TrendingDown
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,7 +41,6 @@ fun DettaglioKarmaScreen(
             .padding(horizontal = 16.dp)
             .padding(bottom = 16.dp)
     ) {
-        // --- HEADER DETTAGLIO ---
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -69,7 +66,6 @@ fun DettaglioKarmaScreen(
             )
         }
 
-        // --- LISTA DEI BILANCI INCROCIATI ---
         if (listaBilanci.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Nessun altro componente nel gruppo.", color = MaterialTheme.colorScheme.outline)

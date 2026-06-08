@@ -3,13 +3,11 @@ package it.col.mar.android.carkarma.presentation.navigation
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -18,9 +16,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import it.col.mar.android.carkarma.data.database.AppContainer
 import it.col.mar.android.carkarma.data.database.AppContainer.gruppoRepository
-
-import it.col.mar.android.carkarma.domain.repository.AuthRepository
 import it.col.mar.android.carkarma.data.model.UserData
+import it.col.mar.android.carkarma.domain.repository.AuthRepository
 import it.col.mar.android.carkarma.presentation.amico.AmicoScreen
 import it.col.mar.android.carkarma.presentation.amico.AmicoViewModel
 import it.col.mar.android.carkarma.presentation.amico.AmicoViewModelFactory
@@ -50,11 +47,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun CarKarmaNavHost(
     navController: NavHostController,
-    paddingValues: PaddingValues,
     authRepository: AuthRepository,
     onLoginSuccess: (UserData) -> Unit
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     val launcher = rememberLauncherForActivityResult(
@@ -73,14 +68,14 @@ fun CarKarmaNavHost(
         }
     }
 
-    val destinationAfterSplash = if (authRepository.getSignedInUser() != null) Screen.Home.route else "login"
+    val destinationAfterSplash =
+        if (authRepository.getSignedInUser() != null) Screen.Home.route else "login"
 
     NavHost(
         navController = navController,
         startDestination = destinationAfterSplash,
         modifier = Modifier
     ) {
-        // --- SCHERMATA LOGIN ---
         composable("login") {
             val loginViewModel: LoginViewModel = viewModel(factory = LoginViewModelFactory())
             val state by loginViewModel.state.collectAsState()
@@ -99,22 +94,18 @@ fun CarKarmaNavHost(
             )
         }
 
-        // --- SCHERMATA HOME ---
         composable(Screen.Home.route) {
             HomeScreen(navController)
         }
 
-        // --- SCHERMATA PRIVACY POLICY ---
         composable("privacy") {
             PrivacyScreen(navController)
         }
 
-        // --- SCHERMATA CREDITI ---
         composable("credits") {
             CreditsScreen(navController)
         }
 
-        // --- SCHERMATA STATISTICHE ---
         composable(
             route = "statistiche/{gruppoId}",
             arguments = listOf(navArgument("gruppoId") { type = NavType.StringType })
@@ -123,13 +114,13 @@ fun CarKarmaNavHost(
             val vm: StatisticheViewModel = viewModel(
                 factory = StatisticheViewModelFactory(
                     AppContainer.gruppoRepository,
-                    AppContainer.uscitaRepository
+                    AppContainer.uscitaRepository,
+                    AppContainer.carburanteRepository
                 )
             )
             StatisticheScreen(navController, gruppoId, vm)
         }
 
-        // --- SCHERMATA DETTAGLIO GRUPPO ---
         composable(
             route = Screen.Gruppo.route,
             arguments = listOf(navArgument("gruppoId") { type = NavType.StringType })
@@ -144,11 +135,13 @@ fun CarKarmaNavHost(
             GruppoScreen(navController, gruppoId, vm)
         }
 
-        // --- CREAZIONE/MODIFICA GRUPPO ---
         composable(
             route = Screen.ModificaGruppo.route,
             arguments = listOf(
-                navArgument("gruppoId") { type = NavType.StringType; defaultValue = "" }
+                navArgument("gruppoId") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
             )
         ) { backStackEntry ->
             val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
@@ -161,12 +154,17 @@ fun CarKarmaNavHost(
             ModificaGruppoScreen(navController, gruppoId, vm)
         }
 
-        // --- DETTAGLIO AMICO ---
         composable(
             route = "amico?amicoId={amicoId}&gruppoId={gruppoId}",
             arguments = listOf(
-                navArgument("amicoId") { type = NavType.StringType; defaultValue = "" },
-                navArgument("gruppoId") { type = NavType.StringType; defaultValue = "" }
+                navArgument("amicoId") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("gruppoId") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
             )
         ) { backStackEntry ->
             val amicoId = backStackEntry.arguments?.getString("amicoId") ?: ""
@@ -180,13 +178,14 @@ fun CarKarmaNavHost(
             AmicoScreen(navController, amicoId, vm, gruppoId)
         }
 
-        // --- SCHERMATA USCITA (NUOVA O MODIFICA) ---
-        // CORRETTO: Passiamo carburanteRepository al posto del vecchio amicoRepository
         composable(
             route = Screen.Uscita.route,
             arguments = listOf(
                 navArgument("gruppoId") { type = NavType.StringType },
-                navArgument("uscitaId") { type = NavType.StringType; defaultValue = "" }
+                navArgument("uscitaId") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
             )
         ) { backStackEntry ->
             val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
@@ -200,11 +199,11 @@ fun CarKarmaNavHost(
             )
             UscitaScreen(navController, gruppoId, uscitaId, vm)
         }
+
         composable("dettaglio_karma/{gruppoId}/{componenteId}") { backStackEntry ->
             val gruppoId = backStackEntry.arguments?.getString("gruppoId") ?: ""
             val componenteId = backStackEntry.arguments?.getString("componenteId") ?: ""
 
-            // Inizializzazione pulita tramite Factory dedicata
             val factory = DettaglioKarmaViewModelFactory(gruppoRepository)
             val dettaglioViewModel: DettaglioKarmaViewModel = viewModel(factory = factory)
 

@@ -23,18 +23,15 @@ interface GruppoRepository {
         amicoId: String,
         deltaUscite: Int,
         deltaGuide: Int,
-        deltaKm: Int,
-        deltaKarma: Double
+        deltaKm: Int
     )
 
-    // GARANZIA ARCHITETTURALE: suspend per forzare l'attesa transazionale
     suspend fun aggiornaStatisticheMembroP2P(
         gruppoId: String,
         amicoId: String,
         deltaUscite: Int,
         deltaGuide: Int,
         deltaKm: Int,
-        deltaKarma: Double,
         deltaBilanci: Map<String, Double>
     )
 

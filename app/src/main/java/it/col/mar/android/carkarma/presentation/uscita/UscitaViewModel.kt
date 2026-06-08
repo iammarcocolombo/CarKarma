@@ -68,8 +68,8 @@ class UscitaViewModel(
     val errorMessage: StateFlow<String?> = _errorMessage
 
     fun loadUscita(gruppoId: String, uscitaId: String) {
-        this.currentGruppoId = gruppoId
-        this.currentUscitaId = uscitaId
+        currentGruppoId = gruppoId
+        currentUscitaId = uscitaId
 
         viewModelScope.launch {
             gruppoRepository.getMembriDelGruppo(gruppoId).collect { membri ->
@@ -100,9 +100,8 @@ class UscitaViewModel(
 
     fun onAndataRitornoChange(isAR: Boolean) {
         _isAndataRitorno.value = isAR
-        if (lastCalculatedOneWayKm != null) {
-            val multiplier = if (isAR) 2 else 1
-            _kmTotali.value = lastCalculatedOneWayKm!! * multiplier
+        lastCalculatedOneWayKm?.let { kmBase ->
+            _kmTotali.value = kmBase * if (isAR) 2 else 1
         }
     }
 
@@ -152,12 +151,9 @@ class UscitaViewModel(
                 val kmSolaAndata = withContext(Dispatchers.IO) {
                     fetchGoogleDistance(start, end)
                 }
-
                 lastCalculatedOneWayKm = kmSolaAndata
-                val multiplier = if (_isAndataRitorno.value) 2 else 1
-                _kmTotali.value = kmSolaAndata * multiplier
+                _kmTotali.value = kmSolaAndata * if (_isAndataRitorno.value) 2 else 1
                 _errorMessage.value = null
-
             } catch (e: Exception) {
                 _errorMessage.value = "Errore Maps: ${e.message}"
             } finally {
@@ -169,16 +165,14 @@ class UscitaViewModel(
     private fun fetchGoogleDistance(origin: String, destination: String): Int {
         val originEnc = URLEncoder.encode(origin, "UTF-8")
         val destEnc = URLEncoder.encode(destination, "UTF-8")
-
         val url = "https://maps.googleapis.com/maps/api/directions/json?origin=$originEnc&destination=$destEnc&key=$mapsAPIKEY"
 
         val jsonResponse = URL(url).readText()
         val jsonObject = JSONObject(jsonResponse)
-
         val status = jsonObject.getString("status")
+
         if (status != "OK") {
-            Log.e("CarKarmaMaps", "Google API Error: $status")
-            val msg = when(status) {
+            val msg = when (status) {
                 "REQUEST_DENIED" -> "Accesso negato. Controlla Billing e API Key."
                 "OVER_QUERY_LIMIT" -> "Quota superata."
                 "ZERO_RESULTS" -> "Percorso non trovato."
@@ -193,7 +187,7 @@ class UscitaViewModel(
             if (legs.length() > 0) {
                 val distance = legs.getJSONObject(0).getJSONObject("distance")
                 val meters = distance.getInt("value")
-                return ((meters + 500) / 1000)
+                return (meters + 500) / 1000
             }
         }
         throw Exception("Risposta vuota da Google Maps.")
@@ -202,6 +196,7 @@ class UscitaViewModel(
     fun calcolaSuggerimento() {
         val amici = _amiciDelGruppo.value
         val part = _partecipantiSelezionati.value
+
         if (part.size < 2) {
             _suggerimentoGuidatore.value = "Seleziona almeno 2 partecipanti."
             return
@@ -209,7 +204,6 @@ class UscitaViewModel(
 
         viewModelScope.launch {
             val res = calcoloUseCase.calcolaChiGuida(amici, part)
-
             if (res.isNotEmpty()) {
                 val sb = StringBuilder("🚗 Consigliati:\n")
                 res.forEach { (a, bilancioEuro) ->
@@ -255,64 +249,98 @@ class UscitaViewModel(
                 uscitaRepository.aggiornaUscita(nuovaUscita)
                 elaboraStatisticheP2P(nuovaUscita, prezzi, isRevert = false)
             }
+
             onSalvato()
         }
     }
 
-    private suspend fun elaboraStatisticheP2P(u: Uscita, prezzi: Map<String, Double>, isRevert: Boolean) {
-        val numPartecipanti = u.partecipantiIds.size
-        if (numPartecipanti == 0) return
+    private suspend fun elaboraStatisticheP2P(
+        u: Uscita,
+        prezzi: Map<String, Double>,
+        isRevert: Boolean
+    ) {
+        val partecipantiIds = u.partecipantiIds.toSet()
+        val guidatoriIds = u.guidatoriIds.toSet()
+        val passeggeriIds = partecipantiIds - guidatoriIds
+
+        val numPartecipanti = partecipantiIds.size
+        if (numPartecipanti == 0 || guidatoriIds.isEmpty()) return
 
         val multiplier = if (isRevert) -1.0 else 1.0
         val statMultiplier = if (isRevert) -1 else 1
 
-        Log.d("CarKarmaP2P", "--- INIZIO CALCOLO P2P --- Uscita: ${u.nome} (Revert: $isRevert)")
-
-        // 1. Calcoliamo quanto ha speso (in Euro) ciascun guidatore per questo viaggio
-        val quoteGuidatori = u.guidatoriIds.mapNotNull { dId ->
-            val driver = _amiciDelGruppo.value.find { it.id == dId } ?: return@mapNotNull null
+        val speseGuidatori = guidatoriIds.mapNotNull { driverId ->
+            val driver = _amiciDelGruppo.value.find { it.id == driverId } ?: return@mapNotNull null
             val costoKm = calcoloUseCase.calcolaCostoChilometrico(driver, prezzi)
-            val spesaTotaleDriver = u.kmTotali * costoKm
-            val quotaSingolaA_Testa = spesaTotaleDriver / numPartecipanti
-
-            Log.d("CarKarmaP2P", "Guidatore: ${driver.nome}, Spesa Reale: $spesaTotaleDriver €, Quota/Passeggero: $quotaSingolaA_Testa €")
-            dId to quotaSingolaA_Testa
+            val spesa = u.kmTotali * costoKm
+            driverId to spesa
         }
 
-        // 2. Aggiorniamo le statistiche e i bilanci di ciascun partecipante
-        u.partecipantiIds.forEach { pId ->
-            val haGuidato = u.guidatoriIds.contains(pId)
-            val kmFisici = if (haGuidato) u.kmTotali else 0
+        val spesaTotale = speseGuidatori.sumOf { it.second }
+        val quotaPerPersona = spesaTotale / numPartecipanti
 
-            var karmaLegacy = 0.0
+        val creditiGuidatori = speseGuidatori.associate { (driverId, spesaDriver) ->
+            driverId to (spesaDriver - quotaPerPersona)
+        }
+
+        val totaleCreditiDaRecuperare = creditiGuidatori.values.sum()
+
+        Log.d("CarKarmaP2P", "--- INIZIO CALCOLO P2P EQUO --- Uscita: ${u.nome} (Revert: $isRevert)")
+        Log.d("CarKarmaP2P", "Spesa totale: $spesaTotale, quota per persona: $quotaPerPersona")
+        Log.d("CarKarmaP2P", "Crediti guidatori: $creditiGuidatori")
+
+        partecipantiIds.forEach { partecipanteId ->
+            val haGuidato = guidatoriIds.contains(partecipanteId)
+            val kmFisici = if (haGuidato) u.kmTotali else 0
             val deltaBilanci = mutableMapOf<String, Double>()
 
-            for ((dId, quota) in quoteGuidatori) {
-                if (pId == dId) {
-                    karmaLegacy += (quota * numPartecipanti)
-                    u.partecipantiIds.forEach { altroId ->
-                        if (altroId != pId) {
-                            deltaBilanci[altroId] = (deltaBilanci[altroId] ?: 0.0) + (quota * multiplier)
+            if (haGuidato) {
+                if (passeggeriIds.isNotEmpty()) {
+                    val creditoDriver = creditiGuidatori[partecipanteId] ?: 0.0
+
+                    passeggeriIds.forEach { passeggeroId ->
+                        val quotaVersoQuestoDriver =
+                            if (totaleCreditiDaRecuperare > 0.0) {
+                                quotaPerPersona * (creditoDriver / totaleCreditiDaRecuperare)
+                            } else {
+                                0.0
+                            }
+
+                        if (quotaVersoQuestoDriver != 0.0) {
+                            deltaBilanci[passeggeroId] =
+                                (deltaBilanci[passeggeroId] ?: 0.0) + (quotaVersoQuestoDriver * multiplier)
                         }
                     }
-                } else {
-                    deltaBilanci[dId] = (deltaBilanci[dId] ?: 0.0) - (quota * multiplier)
+                }
+            } else {
+                creditiGuidatori.forEach { (driverId, creditoDriver) ->
+                    val quotaVersoQuestoDriver =
+                        if (totaleCreditiDaRecuperare > 0.0) {
+                            quotaPerPersona * (creditoDriver / totaleCreditiDaRecuperare)
+                        } else {
+                            0.0
+                        }
+
+                    if (quotaVersoQuestoDriver != 0.0) {
+                        deltaBilanci[driverId] =
+                            (deltaBilanci[driverId] ?: 0.0) - (quotaVersoQuestoDriver * multiplier)
+                    }
                 }
             }
 
-            Log.d("CarKarmaP2P", "Amico ID ($pId) - Modifiche P2P generate: $deltaBilanci")
+            Log.d("CarKarmaP2P", "Partecipante $partecipanteId -> $deltaBilanci")
 
             gruppoRepository.aggiornaStatisticheMembroP2P(
                 gruppoId = currentGruppoId,
-                amicoId = pId,
+                amicoId = partecipanteId,
                 deltaUscite = 1 * statMultiplier,
                 deltaGuide = (if (haGuidato) 1 else 0) * statMultiplier,
                 deltaKm = kmFisici * statMultiplier,
-                deltaKarma = karmaLegacy * multiplier,
                 deltaBilanci = deltaBilanci
             )
         }
-        Log.d("CarKarmaP2P", "--- FINE CALCOLO P2P ---")
+
+        Log.d("CarKarmaP2P", "--- FINE CALCOLO P2P EQUO ---")
     }
 
     fun eliminaUscita(onEliminato: () -> Unit) {
