@@ -30,7 +30,6 @@ import it.col.mar.android.carkarma.util.AvatarProvider
 fun HomeScreen(
     navController: NavHostController
 ) {
-    // Istanziamo il ViewModel sfruttando il repository esposto centralmente nell'AppContainer
     val viewModel: HomeViewModel = viewModel(
         factory = HomeViewModelFactory(AppContainer.gruppoRepository)
     )
@@ -43,30 +42,29 @@ fun HomeScreen(
     var showJoinDialog by remember { mutableStateOf(false) }
     var codiceGruppoInput by remember { mutableStateOf("") }
 
+    // Funzione di chiusura centralizzata: resetta TUTTO insieme
+    fun chiudiDialog() {
+        showJoinDialog = false
+        codiceGruppoInput = ""
+        viewModel.resetJoinState()
+    }
+
     LaunchedEffect(joinState) {
         when (joinState) {
             is JoinState.Success -> {
                 Toast.makeText(context, "Ti sei unito al gruppo!", Toast.LENGTH_SHORT).show()
-                showJoinDialog = false
-                viewModel.resetJoinState()
-                codiceGruppoInput = ""
-            }
-            is JoinState.Error -> {
-                // L'errore viene visualizzato direttamente all'interno del Dialog
+                chiudiDialog()
             }
             else -> {}
         }
     }
 
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-            // Sotto-intestazione pulita ed elegante, allineata a sinistra (senza ripetere "Benvenuto su CarKarma")
             Text(
                 text = "I tuoi Gruppi",
                 style = MaterialTheme.typography.titleMedium,
@@ -76,7 +74,6 @@ fun HomeScreen(
             )
 
             if (gruppi.isEmpty()) {
-                // --- STATO VUOTO (EMPTY STATE) ---
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -104,10 +101,9 @@ fun HomeScreen(
                     }
                 }
             } else {
-                // --- LISTA GRUPPI ---
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 88.dp) // Spazio ideale per non sovrapporsi ai FAB
+                    contentPadding = PaddingValues(bottom = 88.dp)
                 ) {
                     items(gruppi) { gruppo ->
                         GruppoCard(
@@ -120,14 +116,12 @@ fun HomeScreen(
             }
         }
 
-        // FAB posizionati in modo reattivo nell'angolo in basso a destra
         Column(
             horizontalAlignment = Alignment.End,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp)
         ) {
-            // FAB Secondario: Consente di unirsi a un gruppo tramite codice d'invito
             SmallFloatingActionButton(
                 onClick = { showJoinDialog = true },
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -138,7 +132,6 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // FAB Principale: Crea un nuovo gruppo da zero
             FloatingActionButton(
                 onClick = { navController.navigate("modificaGruppo") },
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -149,10 +142,11 @@ fun HomeScreen(
         }
     }
 
-    // --- DIALOG DI INVITO / INGRESSO ---
+    // Dialog mostrato solo quando showJoinDialog == true
     if (showJoinDialog) {
         AlertDialog(
-            onDismissRequest = { viewModel.resetJoinState() },
+            // FIX PRINCIPALE: onDismissRequest chiude il dialog correttamente
+            onDismissRequest = { chiudiDialog() },
             title = { Text("Unisciti a un Gruppo") },
             text = {
                 Column {
@@ -160,7 +154,11 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = codiceGruppoInput,
-                        onValueChange = { codiceGruppoInput = it },
+                        onValueChange = {
+                            codiceGruppoInput = it
+                            // Resetta l'errore non appena l'utente inizia a riscrivere
+                            if (joinState is JoinState.Error) viewModel.resetJoinState()
+                        },
                         label = { Text("Codice Gruppo") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -194,7 +192,8 @@ fun HomeScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.resetJoinState() }) {
+                // FIX: usa chiudiDialog() invece di solo resetJoinState()
+                TextButton(onClick = { chiudiDialog() }) {
                     Text("Annulla")
                 }
             }
@@ -222,7 +221,6 @@ fun GruppoCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Cerchio Avatar Intelligente: Integra le icone selezionate da AvatarProvider
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.primaryContainer,
