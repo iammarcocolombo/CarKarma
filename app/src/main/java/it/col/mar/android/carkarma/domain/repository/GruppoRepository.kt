@@ -18,13 +18,6 @@ interface GruppoRepository {
     fun aggiungiMembroAlGruppo(gruppoId: String, amicoTemplate: Amico)
     fun rimuoviMembroDalGruppo(gruppoId: String, amicoId: String)
 
-    fun aggiornaStatisticheMembro(
-        gruppoId: String,
-        amicoId: String,
-        deltaUscite: Int,
-        deltaGuide: Int,
-        deltaKm: Int
-    )
 
     suspend fun aggiornaStatisticheMembroP2P(
         gruppoId: String,

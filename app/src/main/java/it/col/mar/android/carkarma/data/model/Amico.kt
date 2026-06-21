@@ -9,8 +9,6 @@ data class Amico(
     val guide: Int = 0,
     val km: Int = 0,
 
-    // Chiave: ID dell'altro amico.
-    // Valore: positivo = sono in credito con lui, negativo = sono in debito con lui
     val bilanci: Map<String, Double> = emptyMap(),
 
     val tipoCarburante: String = "Benzina",

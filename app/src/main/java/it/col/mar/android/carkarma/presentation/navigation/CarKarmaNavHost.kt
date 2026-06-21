@@ -114,8 +114,7 @@ fun CarKarmaNavHost(
             val vm: StatisticheViewModel = viewModel(
                 factory = StatisticheViewModelFactory(
                     AppContainer.gruppoRepository,
-                    AppContainer.uscitaRepository,
-                    AppContainer.carburanteRepository
+                    AppContainer.uscitaRepository
                 )
             )
             StatisticheScreen(navController, gruppoId, vm)

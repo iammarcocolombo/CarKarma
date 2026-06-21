@@ -133,29 +133,6 @@ class GruppoRepositoryImpl(
             .delete()
     }
 
-    override fun aggiornaStatisticheMembro(
-        gruppoId: String,
-        amicoId: String,
-        deltaUscite: Int,
-        deltaGuide: Int,
-        deltaKm: Int
-    ) {
-        val docRef = db.collection("gruppi").document(gruppoId)
-            .collection("membri").document(amicoId)
-
-        db.runTransaction { transaction ->
-            val snapshot = transaction.get(docRef)
-            val amico = snapshot.toObject(Amico::class.java) ?: return@runTransaction
-
-            val updates = mapOf(
-                "uscite" to (amico.uscite + deltaUscite).coerceAtLeast(0),
-                "guide" to (amico.guide + deltaGuide).coerceAtLeast(0),
-                "km" to (amico.km + deltaKm).coerceAtLeast(0)
-            )
-            transaction.update(docRef, updates)
-        }
-    }
-
     override suspend fun aggiornaStatisticheMembroP2P(
         gruppoId: String,
         amicoId: String,

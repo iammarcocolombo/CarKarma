@@ -1,6 +1,5 @@
 package it.col.mar.android.carkarma.presentation.statistiche
 
-import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,7 +8,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Equalizer
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.*
@@ -22,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -43,9 +40,6 @@ fun StatisticheScreen(
     val nUscite by viewModel.numeroUscite.collectAsState()
     val media by viewModel.mediaKm.collectAsState()
     val classifica by viewModel.classifica.collectAsState()
-    val isRecalculating by viewModel.isRecalculating.collectAsState()
-
-    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -78,25 +72,6 @@ fun StatisticheScreen(
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.weight(1f)
             )
-
-            // --- PULSANTE DI RICALCOLO AUTOMATICO STORICO ---
-            if (isRecalculating) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-            } else {
-                IconButton(
-                    onClick = {
-                        viewModel.ricalcolaTuttoLoStorico(gruppoId) {
-                            Toast.makeText(context, "Storico ricalcolato con successo! 🎉", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Ricalcola tutto",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
         }
 
         // --- HEADER BOLLE ---
@@ -192,7 +167,7 @@ fun ClassificaItem(
     onClickItem: () -> Unit
 ) {
     Card(
-        onClick = onClickItem, // Abilita il click nativo M3 sulla riga del membro
+        onClick = onClickItem,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
