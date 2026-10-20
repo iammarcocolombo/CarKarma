@@ -5,6 +5,7 @@ data class Uscita(
     val gruppoId: String = "",
     val nome: String = "",
     val partecipantiIds: List<String> = emptyList(),
+    val ospiti: Map<String, Int> = emptyMap(), // Map<amicoId, numeroOspiti>
     val kmTotali: Int = 0,
     val guidatoriIds: List<String> = emptyList(),
     val partenza: String = "",

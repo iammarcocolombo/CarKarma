@@ -7,10 +7,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddLocation
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,6 +42,7 @@ fun UscitaScreen(
     val nomeUscita by viewModel.nomeUscita.collectAsState()
     val amiciDelGruppo by viewModel.amiciDelGruppo.collectAsState()
     val partecipantiSelezionati by viewModel.partecipantiSelezionati.collectAsState()
+    val ospitiMap by viewModel.ospitiMap.collectAsState()
     val guidatoriSelezionati by viewModel.guidatoriSelezionati.collectAsState()
     val kmTotali by viewModel.kmTotali.collectAsState()
 
@@ -47,6 +50,7 @@ fun UscitaScreen(
     val destinazione by viewModel.indirizzoDestinazione.collectAsState()
     val isAndataRitorno by viewModel.isAndataRitorno.collectAsState()
     val isLoadingMaps by viewModel.isLoadingMaps.collectAsState()
+    val isSalvataggioInCorso by viewModel.isSalvataggioInCorso.collectAsState()
 
     val suggerimento by viewModel.suggerimentoGuidatore.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -54,7 +58,6 @@ fun UscitaScreen(
     var showEliminaDialog by remember { mutableStateOf(false) }
     val isEditing = uscitaId.isNotEmpty()
 
-    // Ottimizzazione: Rimosso lo stato doppio "showSuggestionSheet" per evitare loop e freeze
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
 
@@ -63,6 +66,9 @@ fun UscitaScreen(
             guidatoriSelezionati.isNotEmpty()
 
     val scrollState = rememberScrollState()
+
+    val totaleOspiti = ospitiMap.values.sum()
+    val totaleFisicoPersone = partecipantiSelezionati.size + totaleOspiti
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -87,6 +93,7 @@ fun UscitaScreen(
                 onValueChange = { viewModel.onNomeUscitaChange(it) },
                 label = { Text("Descrizione (es. Pizzata)") },
                 modifier = Modifier.fillMaxWidth(),
+                enabled = !isSalvataggioInCorso,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
                 leadingIcon = { Icon(Icons.Default.DirectionsCar, null) }
             )
@@ -111,6 +118,7 @@ fun UscitaScreen(
                             onValueChange = { viewModel.onPartenzaChange(it) },
                             label = { Text("Partenza") },
                             modifier = Modifier.weight(1f),
+                            enabled = !isSalvataggioInCorso,
                             singleLine = true,
                             leadingIcon = { Icon(Icons.Default.Place, null) }
                         )
@@ -120,6 +128,7 @@ fun UscitaScreen(
                             onValueChange = { viewModel.onDestinazioneChange(it) },
                             label = { Text("Destinazione") },
                             modifier = Modifier.weight(1f),
+                            enabled = !isSalvataggioInCorso,
                             singleLine = true,
                             leadingIcon = { Icon(Icons.Default.AddLocation, null) }
                         )
@@ -135,7 +144,7 @@ fun UscitaScreen(
                             Button(
                                 onClick = { viewModel.calcolaDistanzaDaMaps() },
                                 modifier = Modifier.weight(1f),
-                                enabled = !isLoadingMaps,
+                                enabled = !isLoadingMaps && !isSalvataggioInCorso,
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                             ) {
                                 if (isLoadingMaps) {
@@ -166,6 +175,7 @@ fun UscitaScreen(
                             )
                             Switch(
                                 checked = isAndataRitorno,
+                                enabled = !isSalvataggioInCorso,
                                 onCheckedChange = { viewModel.onAndataRitornoChange(it) }
                             )
                         }
@@ -180,6 +190,7 @@ fun UscitaScreen(
                         },
                         label = { Text("Km Totali") },
                         modifier = Modifier.fillMaxWidth(),
+                        enabled = !isSalvataggioInCorso,
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         suffix = { Text("km") }
@@ -190,7 +201,7 @@ fun UscitaScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Chi è presente? (${partecipantiSelezionati.size})",
+                text = "Chi è presente? (${partecipantiSelezionati.size}${if (totaleOspiti > 0) " + $totaleOspiti ospiti = $totaleFisicoPersone persone" else ""})",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
@@ -204,21 +215,90 @@ fun UscitaScreen(
                         Text("Nessun amico nel gruppo.", modifier = Modifier.padding(16.dp))
                     } else {
                         amiciDelGruppo.forEach { amico ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
+                            val isSelezionato = partecipantiSelezionati.contains(amico.id)
+                            val numOspiti = ospitiMap[amico.id] ?: 0
+
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { viewModel.togglePartecipanteSelezionato(amico.id) }
-                                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                                    .padding(vertical = 2.dp)
                             ) {
-                                Checkbox(
-                                    checked = partecipantiSelezionati.contains(amico.id),
-                                    onCheckedChange = { viewModel.togglePartecipanteSelezionato(amico.id) }
-                                )
-                                Text(
-                                    text = "${amico.nome} (${amico.postiAuto} posti)",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
+                                // RIGA 1: Checkbox + Nome (ha tutto lo spazio che serve)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = !isSalvataggioInCorso) {
+                                            viewModel.togglePartecipanteSelezionato(amico.id)
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Checkbox(
+                                        checked = isSelezionato,
+                                        enabled = !isSalvataggioInCorso,
+                                        onCheckedChange = { viewModel.togglePartecipanteSelezionato(amico.id) }
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "${amico.nome} (${amico.postiAuto} posti)",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                // RIGA 2: Selettore Ospiti (+1) elegante, visibile solo se l'amico è selezionato
+                                if (isSelezionato) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 52.dp, end = 16.dp, bottom = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = if (numOspiti > 0) "Ospiti al seguito: $numOspiti" else "Aggiungi ospiti:",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = if (numOspiti > 0) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (numOspiti > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            IconButton(
+                                                onClick = { viewModel.decrementaOspiti(amico.id) },
+                                                enabled = !isSalvataggioInCorso && numOspiti > 0,
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Remove,
+                                                    contentDescription = "Meno ospiti",
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+
+                                            Text(
+                                                text = "+$numOspiti",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (numOspiti > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.padding(horizontal = 8.dp)
+                                            )
+
+                                            IconButton(
+                                                onClick = { viewModel.incrementaOspiti(amico.id) },
+                                                enabled = !isSalvataggioInCorso,
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Add,
+                                                    contentDescription = "Più ospiti",
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -231,6 +311,7 @@ fun UscitaScreen(
                 OutlinedButton(
                     onClick = { viewModel.calcolaSuggerimento() },
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = !isSalvataggioInCorso,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary)
                 ) {
                     Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
@@ -259,11 +340,12 @@ fun UscitaScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { viewModel.toggleGuidatoreSelezionato(amico.id) }
+                                    .clickable(enabled = !isSalvataggioInCorso) { viewModel.toggleGuidatoreSelezionato(amico.id) }
                                     .padding(horizontal = 12.dp, vertical = 4.dp)
                             ) {
                                 Checkbox(
                                     checked = guidatoriSelezionati.contains(amico.id),
+                                    enabled = !isSalvataggioInCorso,
                                     onCheckedChange = { viewModel.toggleGuidatoreSelezionato(amico.id) }
                                 )
                                 Text(text = amico.nome, style = MaterialTheme.typography.bodyLarge)
@@ -277,18 +359,29 @@ fun UscitaScreen(
 
             Button(
                 onClick = { viewModel.salvaUscita { navController.popBackStack() } },
-                enabled = isFormValid,
+                enabled = isFormValid && !isSalvataggioInCorso,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
             ) {
-                Text("Salva Uscita", fontWeight = FontWeight.Bold)
+                if (isSalvataggioInCorso) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Salvataggio...", fontWeight = FontWeight.Bold)
+                } else {
+                    Text("Salva Uscita", fontWeight = FontWeight.Bold)
+                }
             }
 
             if (isEditing) {
                 Spacer(modifier = Modifier.height(16.dp))
                 TextButton(
                     onClick = { showEliminaDialog = true },
+                    enabled = !isSalvataggioInCorso,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
@@ -298,13 +391,9 @@ fun UscitaScreen(
         }
     }
 
-    // --- FIX FREEZE: Mostriamo il ModalBottomSheet basandoci ESCLUSIVAMENTE sullo stato del ViewModel ---
     if (suggerimento != null) {
         ModalBottomSheet(
-            onDismissRequest = {
-                // Rimosso lo state locale. Azzerando il suggerimento, il componente scompare in modo sicuro.
-                viewModel.resetSuggerimento()
-            },
+            onDismissRequest = { viewModel.resetSuggerimento() },
             sheetState = sheetState
         ) {
             Column(
@@ -342,7 +431,6 @@ fun UscitaScreen(
 
                 Button(
                     onClick = {
-                        // Chiude prima graficamente il menu, e quando l'animazione finisce azzera lo stato!
                         scope.launch { sheetState.hide() }.invokeOnCompletion {
                             viewModel.resetSuggerimento()
                         }
@@ -367,16 +455,17 @@ fun UscitaScreen(
 
     if (showEliminaDialog) {
         AlertDialog(
-            onDismissRequest = { showEliminaDialog = false },
+            onDismissRequest = { if (!isSalvataggioInCorso) showEliminaDialog = false },
             title = { Text("Eliminare?") },
             text = { Text("L'operazione è irreversibile e i km verranno rimossi dalle statistiche.") },
             confirmButton = {
                 Button(
                     onClick = { viewModel.eliminaUscita { navController.popBackStack() }; showEliminaDialog = false },
+                    enabled = !isSalvataggioInCorso,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Elimina") }
             },
-            dismissButton = { TextButton(onClick = { showEliminaDialog = false }) { Text("Annulla") } }
+            dismissButton = { TextButton(enabled = !isSalvataggioInCorso, onClick = { showEliminaDialog = false }) { Text("Annulla") } }
         )
     }
 }

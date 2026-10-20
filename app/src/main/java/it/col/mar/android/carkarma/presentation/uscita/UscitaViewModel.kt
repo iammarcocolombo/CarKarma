@@ -49,11 +49,18 @@ class UscitaViewModel(
     private val _isLoadingMaps = MutableStateFlow(false)
     val isLoadingMaps: StateFlow<Boolean> = _isLoadingMaps
 
+    private val _isSalvataggioInCorso = MutableStateFlow(false)
+    val isSalvataggioInCorso: StateFlow<Boolean> = _isSalvataggioInCorso
+
     private val _amiciDelGruppo = MutableStateFlow<List<Amico>>(emptyList())
     val amiciDelGruppo: StateFlow<List<Amico>> = _amiciDelGruppo
 
     private val _partecipantiSelezionati = MutableStateFlow<Set<String>>(emptySet())
     val partecipantiSelezionati: StateFlow<Set<String>> = _partecipantiSelezionati
+
+    // Mappa idAmico -> numeroOspiti
+    private val _ospitiMap = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val ospitiMap: StateFlow<Map<String, Int>> = _ospitiMap
 
     private val _guidatoriSelezionati = MutableStateFlow<Set<String>>(emptySet())
     val guidatoriSelezionati: StateFlow<Set<String>> = _guidatoriSelezionati
@@ -84,6 +91,7 @@ class UscitaViewModel(
                     originalUscita = uscita
                     _nomeUscita.value = uscita.nome
                     _partecipantiSelezionati.value = uscita.partecipantiIds.toSet()
+                    _ospitiMap.value = uscita.ospiti
                     _guidatoriSelezionati.value = uscita.guidatoriIds.toSet()
                     _kmTotali.value = uscita.kmTotali
                     _indirizzoPartenza.value = uscita.partenza
@@ -112,10 +120,33 @@ class UscitaViewModel(
                 val nuoviGuidatori = _guidatoriSelezionati.value.toMutableSet()
                 nuoviGuidatori.remove(amicoId)
                 _guidatoriSelezionati.value = nuoviGuidatori
+
+                // Rimuove anche gli ospiti se deselezionato
+                val nuovaMappaOspiti = _ospitiMap.value.toMutableMap()
+                nuovaMappaOspiti.remove(amicoId)
+                _ospitiMap.value = nuovaMappaOspiti
             } else {
                 add(amicoId)
             }
         }
+    }
+
+    fun incrementaOspiti(amicoId: String) {
+        val mappa = _ospitiMap.value.toMutableMap()
+        val attuali = mappa[amicoId] ?: 0
+        mappa[amicoId] = attuali + 1
+        _ospitiMap.value = mappa
+    }
+
+    fun decrementaOspiti(amicoId: String) {
+        val mappa = _ospitiMap.value.toMutableMap()
+        val attuali = mappa[amicoId] ?: 0
+        if (attuali > 1) {
+            mappa[amicoId] = attuali - 1
+        } else {
+            mappa.remove(amicoId)
+        }
+        _ospitiMap.value = mappa
     }
 
     fun toggleGuidatoreSelezionato(amicoId: String) {
@@ -203,14 +234,15 @@ class UscitaViewModel(
         }
 
         viewModelScope.launch {
-            val res = calcoloUseCase.calcolaChiGuida(amici, part)
+            val res = calcoloUseCase.calcolaChiGuida(amici, part, _ospitiMap.value)
             if (res.isNotEmpty()) {
-                val sb = StringBuilder("🚗 Consigliati:\n")
-                res.forEach { (a, bilancioEuro) ->
+                val numAuto = res.size
+                val sb = StringBuilder("🚗 Consigliati ($numAuto ${if (numAuto == 1) "auto necessaria" else "auto necessarie"}):\n\n")
+                res.forEachIndexed { index, (a, bilancioEuro) ->
                     val segno = if (bilancioEuro > 0) "+" else ""
-                    sb.append("- ${a.nome} (Bilancio: $segno${String.format(Locale.US, "%.2f", bilancioEuro)}€)\n")
+                    sb.append("${index + 1}. ${a.nome} (${a.postiAuto} posti)\n   Bilancio: $segno${String.format(Locale.US, "%.2f", bilancioEuro)}€\n\n")
                 }
-                _suggerimentoGuidatore.value = sb.toString()
+                _suggerimentoGuidatore.value = sb.toString().trim()
             } else {
                 _suggerimentoGuidatore.value = "Nessuna soluzione trovata."
             }
@@ -221,36 +253,46 @@ class UscitaViewModel(
     fun clearError() { _errorMessage.value = null }
 
     fun salvaUscita(onSalvato: () -> Unit) {
+        if (_isSalvataggioInCorso.value) return
+
         if (_partecipantiSelezionati.value.size < 2) {
             _errorMessage.value = "Servono almeno 2 partecipanti."
             return
         }
 
         viewModelScope.launch {
-            val nuovaUscita = Uscita(
-                id = if (currentUscitaId.isEmpty()) "" else currentUscitaId,
-                nome = _nomeUscita.value,
-                gruppoId = currentGruppoId,
-                partecipantiIds = _partecipantiSelezionati.value.toList(),
-                kmTotali = _kmTotali.value,
-                guidatoriIds = _guidatoriSelezionati.value.toList(),
-                partenza = _indirizzoPartenza.value,
-                destinazione = _indirizzoDestinazione.value,
-                andataRitorno = _isAndataRitorno.value
-            )
+            _isSalvataggioInCorso.value = true
+            try {
+                val nuovaUscita = Uscita(
+                    id = if (currentUscitaId.isEmpty()) "" else currentUscitaId,
+                    nome = _nomeUscita.value,
+                    gruppoId = currentGruppoId,
+                    partecipantiIds = _partecipantiSelezionati.value.toList(),
+                    ospiti = _ospitiMap.value,
+                    kmTotali = _kmTotali.value,
+                    guidatoriIds = _guidatoriSelezionati.value.toList(),
+                    partenza = _indirizzoPartenza.value,
+                    destinazione = _indirizzoDestinazione.value,
+                    andataRitorno = _isAndataRitorno.value
+                )
 
-            val prezzi = carburanteRepository.getPrezziAggiornati()
+                val prezzi = carburanteRepository.getPrezziAggiornati()
 
-            if (currentUscitaId.isEmpty()) {
-                uscitaRepository.aggiungiUscita(nuovaUscita)
-                elaboraStatisticheP2P(nuovaUscita, prezzi, isRevert = false)
-            } else {
-                originalUscita?.let { elaboraStatisticheP2P(it, prezzi, isRevert = true) }
-                uscitaRepository.aggiornaUscita(nuovaUscita)
-                elaboraStatisticheP2P(nuovaUscita, prezzi, isRevert = false)
+                if (currentUscitaId.isEmpty()) {
+                    uscitaRepository.aggiungiUscita(nuovaUscita)
+                    elaboraStatisticheP2P(nuovaUscita, prezzi, isRevert = false)
+                } else {
+                    originalUscita?.let { elaboraStatisticheP2P(it, prezzi, isRevert = true) }
+                    uscitaRepository.aggiornaUscita(nuovaUscita)
+                    elaboraStatisticheP2P(nuovaUscita, prezzi, isRevert = false)
+                }
+
+                onSalvato()
+            } catch (e: Exception) {
+                _errorMessage.value = "Errore durante il salvataggio: ${e.message}"
+            } finally {
+                _isSalvataggioInCorso.value = false
             }
-
-            onSalvato()
         }
     }
 
@@ -263,11 +305,14 @@ class UscitaViewModel(
         val guidatoriIds = u.guidatoriIds.toSet()
         val passeggeriIds = partecipantiIds - guidatoriIds
 
-        val numPartecipanti = partecipantiIds.size
-        if (numPartecipanti == 0 || guidatoriIds.isEmpty()) return
+        if (partecipantiIds.isEmpty() || guidatoriIds.isEmpty()) return
 
         val multiplier = if (isRevert) -1.0 else 1.0
         val statMultiplier = if (isRevert) -1 else 1
+
+        // Totale teste fisiche (membri + somma dei loro ospiti)
+        val totalePersoneFisiche = partecipantiIds.sumOf { 1 + (u.ospiti[it] ?: 0) }
+        if (totalePersoneFisiche == 0) return
 
         val speseGuidatori = guidatoriIds.mapNotNull { driverId ->
             val driver = _amiciDelGruppo.value.find { it.id == driverId } ?: return@mapNotNull null
@@ -277,31 +322,36 @@ class UscitaViewModel(
         }
 
         val spesaTotale = speseGuidatori.sumOf { it.second }
-        val quotaPerPersona = spesaTotale / numPartecipanti
+        val quotaBaseSingolaPersona = spesaTotale / totalePersoneFisiche
 
         val creditiGuidatori = speseGuidatori.associate { (driverId, spesaDriver) ->
-            driverId to (spesaDriver - quotaPerPersona)
+            val personeAccountabiliDriver = 1 + (u.ospiti[driverId] ?: 0)
+            val quotaTotaleDriverEOspiti = quotaBaseSingolaPersona * personeAccountabiliDriver
+            driverId to (spesaDriver - quotaTotaleDriverEOspiti)
         }
 
-        val totaleCreditiDaRecuperare = creditiGuidatori.values.sum()
+        val totaleCreditiDaRecuperare = creditiGuidatori.values.filter { it > 0.0 }.sum()
 
-        Log.d("CarKarmaP2P", "--- INIZIO CALCOLO P2P EQUO --- Uscita: ${u.nome} (Revert: $isRevert)")
-        Log.d("CarKarmaP2P", "Spesa totale: $spesaTotale, quota per persona: $quotaPerPersona")
-        Log.d("CarKarmaP2P", "Crediti guidatori: $creditiGuidatori")
+        Log.d("CarKarmaP2P", "--- INIZIO CALCOLO P2P EQUO (CON OSPITI) --- Uscita: ${u.nome}")
+        Log.d("CarKarmaP2P", "Spesa totale: $spesaTotale, persone fisiche: $totalePersoneFisiche, quota singola: $quotaBaseSingolaPersona")
 
         partecipantiIds.forEach { partecipanteId ->
             val haGuidato = guidatoriIds.contains(partecipanteId)
             val kmFisici = if (haGuidato) u.kmTotali else 0
             val deltaBilanci = mutableMapOf<String, Double>()
+            val personeAccountabili = 1 + (u.ospiti[partecipanteId] ?: 0)
 
             if (haGuidato) {
                 if (passeggeriIds.isNotEmpty()) {
                     val creditoDriver = creditiGuidatori[partecipanteId] ?: 0.0
 
                     passeggeriIds.forEach { passeggeroId ->
+                        val personePass = 1 + (u.ospiti[passeggeroId] ?: 0)
+                        val quotaPasseggeroEEventualiOspiti = quotaBaseSingolaPersona * personePass
+
                         val quotaVersoQuestoDriver =
-                            if (totaleCreditiDaRecuperare > 0.0) {
-                                quotaPerPersona * (creditoDriver / totaleCreditiDaRecuperare)
+                            if (totaleCreditiDaRecuperare > 0.0 && creditoDriver > 0.0) {
+                                quotaPasseggeroEEventualiOspiti * (creditoDriver / totaleCreditiDaRecuperare)
                             } else {
                                 0.0
                             }
@@ -313,10 +363,12 @@ class UscitaViewModel(
                     }
                 }
             } else {
+                val quotaPasseggeroEEventualiOspiti = quotaBaseSingolaPersona * personeAccountabili
+
                 creditiGuidatori.forEach { (driverId, creditoDriver) ->
                     val quotaVersoQuestoDriver =
-                        if (totaleCreditiDaRecuperare > 0.0) {
-                            quotaPerPersona * (creditoDriver / totaleCreditiDaRecuperare)
+                        if (totaleCreditiDaRecuperare > 0.0 && creditoDriver > 0.0) {
+                            quotaPasseggeroEEventualiOspiti * (creditoDriver / totaleCreditiDaRecuperare)
                         } else {
                             0.0
                         }
@@ -327,8 +379,6 @@ class UscitaViewModel(
                     }
                 }
             }
-
-            Log.d("CarKarmaP2P", "Partecipante $partecipanteId -> $deltaBilanci")
 
             gruppoRepository.aggiornaStatisticheMembroP2P(
                 gruppoId = currentGruppoId,
@@ -344,13 +394,22 @@ class UscitaViewModel(
     }
 
     fun eliminaUscita(onEliminato: () -> Unit) {
+        if (_isSalvataggioInCorso.value) return
+
         viewModelScope.launch {
-            if (currentUscitaId.isNotEmpty()) {
-                val prezzi = carburanteRepository.getPrezziAggiornati()
-                originalUscita?.let { elaboraStatisticheP2P(it, prezzi, isRevert = true) }
-                uscitaRepository.eliminaUscita(currentGruppoId, currentUscitaId)
+            _isSalvataggioInCorso.value = true
+            try {
+                if (currentUscitaId.isNotEmpty()) {
+                    val prezzi = carburanteRepository.getPrezziAggiornati()
+                    originalUscita?.let { elaboraStatisticheP2P(it, prezzi, isRevert = true) }
+                    uscitaRepository.eliminaUscita(currentGruppoId, currentUscitaId)
+                }
+                onEliminato()
+            } catch (e: Exception) {
+                _errorMessage.value = "Errore durante l'eliminazione: ${e.message}"
+            } finally {
+                _isSalvataggioInCorso.value = false
             }
-            onEliminato()
         }
     }
 }
