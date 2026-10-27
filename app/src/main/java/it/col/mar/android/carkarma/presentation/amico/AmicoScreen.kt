@@ -1,5 +1,6 @@
 package it.col.mar.android.carkarma.presentation.amico
 
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -13,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -44,6 +46,7 @@ fun AmicoScreen(
     val carbuanteOptions = listOf("Benzina", "Diesel", "GPL", "Metano", "Elettrico", "Ibrida")
 
     val scrollState = rememberScrollState()
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -56,7 +59,6 @@ fun AmicoScreen(
                 .padding(bottom = 32.dp)
         ) {
             // --- HEADER COMPATTO CON TASTO INDIETRO ---
-            // Integrato perfettamente con lo stile grafico di StatisticheScreen
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -82,97 +84,62 @@ fun AmicoScreen(
                 )
             }
 
-            // --- SEZIONE INFO GENERALI ---
-            OutlinedTextField(
-                value = nome,
-                onValueChange = { viewModel.onNomeChange(it) },
-                label = { Text("Nome e Cognome") },
-                singleLine = true,
-                leadingIcon = { Icon(Icons.Default.AccountCircle, null) },
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = postiAuto,
-                onValueChange = { viewModel.onPostiAutoChange(it) },
-                label = { Text("Posti Auto") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
-                suffix = { Text("posti") }
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // --- SEZIONE CONSUMI AUTO ---
-            Text(
-                text = "Dati Auto (Opzionale)",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = !expanded },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedTextField(
-                    value = tipoCarburante,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Alimentazione") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    leadingIcon = { Icon(Icons.Default.LocalGasStation, null) },
-                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                    modifier = Modifier.menuAnchor().fillMaxWidth()
-                )
-
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
+            if (isLandscape) {
+                // --- LAYOUT TABLET ORIZZONTALE (2 COLONNE AFFIANCATE) ---
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    carbuanteOptions.forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option) },
-                            onClick = {
-                                viewModel.onTipoCarburanteChange(option)
-                                expanded = false
-                            }
+                    // COLONNA SINISTRA: Informazioni Personali
+                    Column(modifier = Modifier.weight(1f)) {
+                        SezioneInfoGenerali(
+                            nome = nome,
+                            onNomeChange = viewModel::onNomeChange,
+                            postiAuto = postiAuto,
+                            onPostiAutoChange = viewModel::onPostiAutoChange
+                        )
+                    }
+
+                    // COLONNA DESTRA: Consumi Auto
+                    Column(modifier = Modifier.weight(1f)) {
+                        SezioneConsumiAuto(
+                            tipoCarburante = tipoCarburante,
+                            onTipoCarburanteChange = viewModel::onTipoCarburanteChange,
+                            consumoMedio = consumoMedio,
+                            onConsumoChange = viewModel::onConsumoChange,
+                            carbuanteOptions = carbuanteOptions,
+                            expanded = expanded,
+                            onExpandedChange = { expanded = it }
                         )
                     }
                 }
+            } else {
+                // --- LAYOUT VERTICALE CLASSICO (1 COLONNA SINGOLA) ---
+                SezioneInfoGenerali(
+                    nome = nome,
+                    onNomeChange = viewModel::onNomeChange,
+                    postiAuto = postiAuto,
+                    onPostiAutoChange = viewModel::onPostiAutoChange
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(24.dp))
+
+                SezioneConsumiAuto(
+                    tipoCarburante = tipoCarburante,
+                    onTipoCarburanteChange = viewModel::onTipoCarburanteChange,
+                    consumoMedio = consumoMedio,
+                    onConsumoChange = viewModel::onConsumoChange,
+                    carbuanteOptions = carbuanteOptions,
+                    expanded = expanded,
+                    onExpandedChange = { expanded = it }
+                )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
-            OutlinedTextField(
-                value = consumoMedio,
-                onValueChange = { viewModel.onConsumoChange(it) },
-                label = { Text("Consumo Medio") },
-                placeholder = { Text("Es. 7.5") },
-                singleLine = true,
-                leadingIcon = { Icon(Icons.Default.EvStation, null) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth(),
-                suffix = { Text(if (tipoCarburante == "Elettrico") "kWh/100km" else "L/100km") }
-            )
-
-            Text(
-                text = "Inserisci quanti litri (o kWh) servono per fare 100km. Lascia vuoto per usare lo standard.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(top = 4.dp, start = 4.dp)
-            )
-
-            Spacer(modifier = Modifier.height(48.dp))
-
-            // BOTTONI SALVATAGGIO / ELIMINAZIONE
+            // --- BOTTONI SALVATAGGIO / ELIMINAZIONE ---
             Button(
                 onClick = {
                     viewModel.salvaAmico {
@@ -180,7 +147,9 @@ fun AmicoScreen(
                     }
                 },
                 enabled = nome.isNotBlank(),
-                modifier = Modifier.fillMaxWidth().height(50.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
             ) {
                 Text(if (isEditing) "Salva Modifiche" else "Aggiungi alla Rubrica")
             }
@@ -193,7 +162,9 @@ fun AmicoScreen(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer
                     ),
-                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
                 ) {
                     Text("Elimina Amico")
                 }
@@ -203,7 +174,7 @@ fun AmicoScreen(
 
     if (showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = { },
+            onDismissRequest = { showDeleteDialog = false },
             title = { Text("Eliminare l'amico?") },
             text = { Text("Sei sicuro? Questa azione non può essere annullata.") },
             confirmButton = {
@@ -215,8 +186,127 @@ fun AmicoScreen(
                 ) { Text("Elimina") }
             },
             dismissButton = {
-                TextButton(onClick = { }) { Text("Annulla") }
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Annulla") }
             }
+        )
+    }
+}
+
+// ==========================================
+// COMPONENTI MODULARI PER IL LAYOUT ADATTIVO
+// ==========================================
+
+@Composable
+private fun SezioneInfoGenerali(
+    nome: String,
+    onNomeChange: (String) -> Unit,
+    postiAuto: String,
+    onPostiAutoChange: (String) -> Unit
+) {
+    Column {
+        Text(
+            text = "Informazioni Personali",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        OutlinedTextField(
+            value = nome,
+            onValueChange = onNomeChange,
+            label = { Text("Nome e Cognome") },
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Default.AccountCircle, null) },
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = postiAuto,
+            onValueChange = onPostiAutoChange,
+            label = { Text("Posti Auto") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+            suffix = { Text("posti") }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SezioneConsumiAuto(
+    tipoCarburante: String,
+    onTipoCarburanteChange: (String) -> Unit,
+    consumoMedio: String,
+    onConsumoChange: (String) -> Unit,
+    carbuanteOptions: List<String>,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit
+) {
+    Column {
+        Text(
+            text = "Dati Auto (Opzionale)",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = onExpandedChange,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = tipoCarburante,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Alimentazione") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                leadingIcon = { Icon(Icons.Default.LocalGasStation, null) },
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+            )
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { onExpandedChange(false) }
+            ) {
+                carbuanteOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            onTipoCarburanteChange(option)
+                            onExpandedChange(false)
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = consumoMedio,
+            onValueChange = onConsumoChange,
+            label = { Text("Consumo Medio") },
+            placeholder = { Text("Es. 7.5") },
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Default.EvStation, null) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth(),
+            suffix = { Text(if (tipoCarburante == "Elettrico") "kWh/100km" else "L/100km") }
+        )
+
+        Text(
+            text = "Inserisci quanti litri (o kWh) servono per fare 100km. Lascia vuoto per usare lo standard.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.padding(top = 4.dp, start = 4.dp)
         )
     }
 }

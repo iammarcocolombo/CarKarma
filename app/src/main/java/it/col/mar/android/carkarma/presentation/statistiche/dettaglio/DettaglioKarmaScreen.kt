@@ -1,5 +1,6 @@
 package it.col.mar.android.carkarma.presentation.statistiche.dettaglio
 
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +16,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -35,12 +37,15 @@ fun DettaglioKarmaScreen(
     val nomeComponente by viewModel.nomeComponente.collectAsState()
     val listaBilanci by viewModel.listaBilanci.collectAsState()
 
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp)
             .padding(bottom = 16.dp)
     ) {
+        // --- HEADER COMPATTO ---
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -66,18 +71,162 @@ fun DettaglioKarmaScreen(
             )
         }
 
-        if (listaBilanci.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Nessun altro componente nel gruppo.", color = MaterialTheme.colorScheme.outline)
+        if (isLandscape) {
+            // --- LAYOUT TABLET ORIZZONTALE (2 COLONNE AFFIANCATE) ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                // COLONNA SINISTRA: Scheda Riepilogo Generale
+                Column(
+                    modifier = Modifier
+                        .weight(0.9f)
+                        .fillMaxHeight()
+                ) {
+                    SezioneRiepilogoKarmaTablet(
+                        nomeComponente = nomeComponente,
+                        listaBilanci = listaBilanci
+                    )
+                }
+
+                // COLONNA DESTRA: Lista Bilanci Incrociati
+                Column(
+                    modifier = Modifier
+                        .weight(1.1f)
+                        .fillMaxHeight()
+                ) {
+                    SezioneListaBilanci(
+                        listaBilanci = listaBilanci,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
+            // --- LAYOUT VERTICALE CLASSICO (1 COLONNA SINGOLA) ---
+            SezioneListaBilanci(
+                listaBilanci = listaBilanci,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+// ==========================================
+// COMPONENTI MODULARI PER IL LAYOUT ADATTIVO
+// ==========================================
+
+@Composable
+private fun SezioneRiepilogoKarmaTablet(
+    nomeComponente: String,
+    listaBilanci: List<BilancioIncrociato>
+) {
+    val creditoTotale = listaBilanci.filter { it.saldo > 0.01 }.sumOf { it.saldo }
+    val debitoTotale = listaBilanci.filter { it.saldo < -0.01 }.sumOf { abs(it.saldo) }
+    val saldoNetto = listaBilanci.sumOf { it.saldo }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Text(
+                text = "Resoconto Complessivo",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                items(listaBilanci) { bilancio ->
-                    RowBilancioIncrociato(bilancio)
-                }
+                Text(
+                    text = "Crediti totali:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "${String.format(Locale.US, "%.2f", creditoTotale)}€",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Debiti totali:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "${String.format(Locale.US, "%.2f", debitoTotale)}€",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Saldo Netto:",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "${String.format(Locale.US, "%.2f", saldoNetto)}€",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (saldoNetto >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SezioneListaBilanci(
+    listaBilanci: List<BilancioIncrociato>,
+    modifier: Modifier = Modifier
+) {
+    if (listaBilanci.isEmpty()) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Nessun altro componente nel gruppo.",
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+    } else {
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(bottom = 16.dp),
+            modifier = modifier.fillMaxSize()
+        ) {
+            items(listaBilanci) { bilancio ->
+                RowBilancioIncrociato(bilancio)
             }
         }
     }

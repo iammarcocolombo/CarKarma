@@ -1,9 +1,13 @@
 package it.col.mar.android.carkarma.presentation.home
 
+import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -42,7 +47,8 @@ fun HomeScreen(
     var showJoinDialog by remember { mutableStateOf(false) }
     var codiceGruppoInput by remember { mutableStateOf("") }
 
-    // Funzione di chiusura centralizzata: resetta TUTTO insieme
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     fun chiudiDialog() {
         showJoinDialog = false
         codiceGruppoInput = ""
@@ -73,79 +79,83 @@ fun HomeScreen(
                 modifier = Modifier.padding(vertical = 12.dp)
             )
 
-            if (gruppi.isEmpty()) {
-                Box(
+            if (isLandscape) {
+                // --- LAYOUT TABLET ORIZZONTALE (2 COLONNE AFFIANCATE) ---
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.List,
-                            contentDescription = null,
-                            modifier = Modifier.size(80.dp),
-                            tint = MaterialTheme.colorScheme.surfaceVariant
+                    // COLONNA SINISTRA: Lista o Griglia dei Gruppi
+                    Column(
+                        modifier = Modifier
+                            .weight(1.3f)
+                            .fillMaxHeight()
+                    ) {
+                        SezioneListaGruppi(
+                            gruppi = gruppi,
+                            navController = navController,
+                            isLandscape = true,
+                            modifier = Modifier.weight(1f)
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Non hai ancora nessun gruppo.",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Crea un gruppo o unisciti con un codice.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+
+                    // COLONNA DESTRA: Pannello Azioni Rapide
+                    Column(
+                        modifier = Modifier
+                            .weight(0.9f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.Top
+                    ) {
+                        PannelloAzioniRapideTablet(
+                            onCreaGruppoClick = { navController.navigate("modificaGruppo") },
+                            onUniscitiClick = { showJoinDialog = true }
                         )
                     }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 88.dp)
-                ) {
-                    items(gruppi) { gruppo ->
-                        GruppoCard(
-                            gruppo = gruppo,
-                            onClick = { navController.navigate("gruppo/${gruppo.id}") }
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-                }
+                // --- LAYOUT VERTICALE CLASSICO (1 COLONNA SINGOLA) ---
+                SezioneListaGruppi(
+                    gruppi = gruppi,
+                    navController = navController,
+                    isLandscape = false,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
 
-        Column(
-            horizontalAlignment = Alignment.End,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
-        ) {
-            SmallFloatingActionButton(
-                onClick = { showJoinDialog = true },
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        // Floating Action Buttons (visibili solo in modalità verticale portrait)
+        if (!isLandscape) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp)
             ) {
-                Icon(Icons.Default.GroupAdd, contentDescription = "Unisciti")
-            }
+                SmallFloatingActionButton(
+                    onClick = { showJoinDialog = true },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                ) {
+                    Icon(Icons.Default.GroupAdd, contentDescription = "Unisciti")
+                }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            FloatingActionButton(
-                onClick = { navController.navigate("modificaGruppo") },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Nuovo Gruppo")
+                FloatingActionButton(
+                    onClick = { navController.navigate("modificaGruppo") },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Nuovo Gruppo")
+                }
             }
         }
     }
 
-    // Dialog mostrato solo quando showJoinDialog == true
     if (showJoinDialog) {
         AlertDialog(
-            // FIX PRINCIPALE: onDismissRequest chiude il dialog correttamente
             onDismissRequest = { chiudiDialog() },
             title = { Text("Unisciti a un Gruppo") },
             text = {
@@ -156,7 +166,6 @@ fun HomeScreen(
                         value = codiceGruppoInput,
                         onValueChange = {
                             codiceGruppoInput = it
-                            // Resetta l'errore non appena l'utente inizia a riscrivere
                             if (joinState is JoinState.Error) viewModel.resetJoinState()
                         },
                         label = { Text("Codice Gruppo") },
@@ -192,12 +201,135 @@ fun HomeScreen(
                 }
             },
             dismissButton = {
-                // FIX: usa chiudiDialog() invece di solo resetJoinState()
                 TextButton(onClick = { chiudiDialog() }) {
                     Text("Annulla")
                 }
             }
         )
+    }
+}
+
+// ==========================================
+// COMPONENTI MODULARI PER IL LAYOUT ADATTIVO
+// ==========================================
+
+@Composable
+private fun SezioneListaGruppi(
+    gruppi: List<Gruppo>,
+    navController: NavHostController,
+    isLandscape: Boolean,
+    modifier: Modifier = Modifier
+) {
+    if (gruppi.isEmpty()) {
+        Box(
+            modifier = modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.List,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp),
+                    tint = MaterialTheme.colorScheme.surfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Non hai ancora nessun gruppo.",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Crea un gruppo o unisciti con un codice.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    } else {
+        if (isLandscape) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(1),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                items(gruppi) { gruppo ->
+                    GruppoCard(
+                        gruppo = gruppo,
+                        onClick = { navController.navigate("gruppo/${gruppo.id}") }
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 88.dp)
+            ) {
+                items(gruppi) { gruppo ->
+                    GruppoCard(
+                        gruppo = gruppo,
+                        onClick = { navController.navigate("gruppo/${gruppo.id}") }
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PannelloAzioniRapideTablet(
+    onCreaGruppoClick: () -> Unit,
+    onUniscitiClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Text(
+                text = "Gestione Gruppi",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Crea un nuovo gruppo di viaggio per i tuoi turni guidatore o unisciti ad uno già esistente.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = onCreaGruppoClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Crea Nuovo Gruppo")
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = onUniscitiClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+            ) {
+                Icon(Icons.Default.GroupAdd, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Unisciti con Codice")
+            }
+        }
     }
 }
 

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -61,19 +62,15 @@ fun AppScaffold(
     // --- GESTIONE TASTO INDIETRO (BACK HANDLER) ---
     var backPressedOnce by remember { mutableStateOf(false) }
 
-    // Si attiva SOLO se il drawer è aperto OPPURE se siamo nella Home
     BackHandler(enabled = drawerState.isOpen || currentRoute == "home") {
         if (drawerState.isOpen) {
-            // Se il drawer è aperto, il tasto indietro lo chiude semplicemente
             scope.launch { drawerState.close() }
         } else if (currentRoute == "home") {
-            // Se siamo in home e il drawer è chiuso, gestiamo il doppio tap per uscire
             if (backPressedOnce) {
-                (context as? Activity)?.finish() // Chiude l'app
+                (context as? Activity)?.finish()
             } else {
                 backPressedOnce = true
                 Toast.makeText(context, "Premi di nuovo per uscire", Toast.LENGTH_SHORT).show()
-                // Avvia un timer: se non premi di nuovo entro 2 secondi, resetta lo stato
                 scope.launch {
                     delay(2000)
                     backPressedOnce = false
@@ -82,7 +79,6 @@ fun AppScaffold(
         }
     }
 
-    // TRUCCO PER IL DRAWER A DESTRA (END DRAWER)
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         ModalNavigationDrawer(
             drawerState = drawerState,
@@ -222,7 +218,11 @@ fun AppScaffold(
                             }
                         }
                     ) { paddingValues ->
-                        Box(modifier = Modifier.padding(paddingValues)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(paddingValues)
+                        ) {
                             content(paddingValues)
                         }
                     }
@@ -240,9 +240,6 @@ fun AppScaffold(
                 Button(
                     onClick = {
                         showDeleteConfirmDialog = false
-                        // FIX: Attendiamo che l'animazione di chiusura del Dialog sia
-                        // completata prima di scatenare l'evento pesante di eliminazione
-                        // che resetterà il NavHost. Evita che il Dialog rimanga bloccato a schermo!
                         scope.launch {
                             delay(300)
                             onDeleteAccount()

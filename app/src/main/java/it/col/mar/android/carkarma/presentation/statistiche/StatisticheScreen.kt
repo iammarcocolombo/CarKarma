@@ -1,5 +1,6 @@
 package it.col.mar.android.carkarma.presentation.statistiche
 
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -41,13 +43,15 @@ fun StatisticheScreen(
     val media by viewModel.mediaKm.collectAsState()
     val classifica by viewModel.classifica.collectAsState()
 
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp)
             .padding(bottom = 16.dp)
     ) {
-        // --- HEADER COMPATTO ---
+        // --- HEADER COMPATTO CON TASTO INDIETRO ---
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -74,34 +78,137 @@ fun StatisticheScreen(
             )
         }
 
-        // --- HEADER BOLLE ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            StatBubble(
-                label = "Km Totali",
-                value = "$kmTotali",
-                icon = Icons.Default.DirectionsCar,
-                color = MaterialTheme.colorScheme.primaryContainer
+        if (isLandscape) {
+            // --- LAYOUT TABLET ORIZZONTALE (2 COLONNE AFFIANCATE) ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                // COLONNA SINISTRA: Metriche e Bolle Statistiche
+                Column(
+                    modifier = Modifier
+                        .weight(0.9f)
+                        .fillMaxHeight()
+                ) {
+                    SezioneRiepilogoStatistiche(
+                        kmTotali = kmTotali,
+                        nUscite = nUscite,
+                        media = media
+                    )
+                }
+
+                // COLONNA DESTRA: Classifica Karma
+                Column(
+                    modifier = Modifier
+                        .weight(1.1f)
+                        .fillMaxHeight()
+                ) {
+                    SezioneClassificaKarma(
+                        classifica = classifica,
+                        gruppoId = gruppoId,
+                        navController = navController,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        } else {
+            // --- LAYOUT VERTICALE CLASSICO (1 COLONNA SINGOLA) ---
+            SezioneBolleStatistiche(
+                kmTotali = kmTotali,
+                nUscite = nUscite,
+                media = media
             )
-            StatBubble(
-                label = "Uscite",
-                value = "$nUscite",
-                icon = Icons.Default.Timeline,
-                color = MaterialTheme.colorScheme.secondaryContainer
-            )
-            StatBubble(
-                label = "Media/Viaggio",
-                value = "$media",
-                icon = Icons.Default.Equalizer,
-                color = MaterialTheme.colorScheme.tertiaryContainer
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            SezioneClassificaKarma(
+                classifica = classifica,
+                gruppoId = gruppoId,
+                navController = navController,
+                modifier = Modifier.weight(1f)
             )
         }
+    }
+}
 
-        // Intestazione Lista
+// ==========================================
+// COMPONENTI MODULARI PER IL LAYOUT ADATTIVO
+// ==========================================
+
+@Composable
+private fun SezioneRiepilogoStatistiche(
+    kmTotali: Int,
+    nUscite: Int,
+    media: Int
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Panoramica Gruppo",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            SezioneBolleStatistiche(
+                kmTotali = kmTotali,
+                nUscite = nUscite,
+                media = media
+            )
+        }
+    }
+}
+
+@Composable
+private fun SezioneBolleStatistiche(
+    kmTotali: Int,
+    nUscite: Int,
+    media: Int
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        StatBubble(
+            label = "Km Totali",
+            value = "$kmTotali",
+            icon = Icons.Default.DirectionsCar,
+            color = MaterialTheme.colorScheme.primaryContainer
+        )
+        StatBubble(
+            label = "Uscite",
+            value = "$nUscite",
+            icon = Icons.Default.Timeline,
+            color = MaterialTheme.colorScheme.secondaryContainer
+        )
+        StatBubble(
+            label = "Media/Viaggio",
+            value = "$media",
+            icon = Icons.Default.Equalizer,
+            color = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    }
+}
+
+@Composable
+private fun SezioneClassificaKarma(
+    classifica: List<StatisticaMembro>,
+    gruppoId: String,
+    navController: NavController,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "Classifica Karma",
@@ -120,15 +227,21 @@ fun StatisticheScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // --- LISTA CLASSIFICA ---
         if (classifica.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Nessun dato sufficiente per la classifica.", color = MaterialTheme.colorScheme.outline)
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Nessun dato sufficiente per la classifica.",
+                    color = MaterialTheme.colorScheme.outline
+                )
             }
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
+                contentPadding = PaddingValues(bottom = 24.dp),
+                modifier = Modifier.fillMaxSize()
             ) {
                 items(classifica) { stat ->
                     ClassificaItem(

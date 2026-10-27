@@ -1,6 +1,7 @@
 package it.col.mar.android.carkarma.presentation.gruppo
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -23,12 +24,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import it.col.mar.android.carkarma.data.model.Gruppo
 import it.col.mar.android.carkarma.data.model.Uscita
 import it.col.mar.android.carkarma.util.AvatarProvider
 import it.col.mar.android.carkarma.util.QrCodeGenerator
@@ -54,8 +57,9 @@ fun GruppoScreen(
     val scope = rememberCoroutineScope()
 
     val sheetState = rememberModalBottomSheetState()
-
     var showLeaveDialog by remember { mutableStateOf(false) }
+
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     if (errorMessage != null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -80,12 +84,11 @@ fun GruppoScreen(
                 .padding(horizontal = 16.dp)
         ) {
             // --- HEADER COMPATTO CON TASTO INDIETRO ---
-            // Integrato con la coerenza stilistica di StatisticheScreen e AmicoScreen
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp, bottom = 16.dp)
+                    .padding(top = 8.dp, bottom = 12.dp)
             ) {
                 IconButton(
                     onClick = { navController.popBackStack() },
@@ -106,116 +109,61 @@ fun GruppoScreen(
                 )
             }
 
-            // --- AVATAR GRUPPO ---
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
+            if (isLandscape) {
+                // --- LAYOUT TABLET ORIZZONTALE (2 COLONNE AFFIANCATE) ---
+                Row(
                     modifier = Modifier
-                        .size(80.dp)
-                        .padding(top = 4.dp)
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        AvatarProvider.DisplayAvatar(
-                            avatar = AvatarProvider.getAvatar(gruppo!!.avatarIndex),
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    // COLONNA SINISTRA: Header Gruppo, Avatar e Tasti Azione
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    ) {
+                        SezioneHeaderGruppo(
+                            gruppo = gruppo!!,
+                            onStatisticheClick = { navController.navigate("statistiche/${gruppo!!.id}") },
+                            onInvitaClick = { scope.launch { sheetState.show() } },
+                            onModificaClick = { navController.navigate("modificaGruppo?gruppoId=${gruppo!!.id}") },
+                            onLasciaClick = { showLeaveDialog = true }
                         )
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // --- INFO E AZIONI GRUPPO ---
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = gruppo!!.nome,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "${gruppo!!.membriIds.size} componenti",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Row {
-                    IconButton(onClick = { navController.navigate("statistiche/${gruppo!!.id}") }) {
-                        Icon(Icons.Default.BarChart, "Statistiche", tint = MaterialTheme.colorScheme.tertiary)
-                    }
-
-                    IconButton(onClick = {
-                        scope.launch { sheetState.show() }
-                    }) {
-                        Icon(Icons.Default.Share, "Invita", tint = MaterialTheme.colorScheme.primary)
-                    }
-
-                    IconButton(onClick = { navController.navigate("modificaGruppo?gruppoId=${gruppo!!.id}") }) {
-                        Icon(Icons.Default.Edit, "Modifica", tint = MaterialTheme.colorScheme.primary)
-                    }
-
-                    IconButton(onClick = { showLeaveDialog = true }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = "Lascia Gruppo",
-                            tint = MaterialTheme.colorScheme.error
+                    // COLONNA DESTRA: Lista Uscite
+                    Column(
+                        modifier = Modifier
+                            .weight(1.2f)
+                            .fillMaxHeight()
+                    ) {
+                        SezioneStoricoUscite(
+                            uscite = uscite,
+                            gruppoId = gruppoId,
+                            navController = navController,
+                            modifier = Modifier.weight(1f)
                         )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "Storico Uscite",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            if (uscite.isEmpty()) {
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.DirectionsCar,
-                            contentDescription = null,
-                            modifier = Modifier.size(80.dp),
-                            tint = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Nessun viaggio registrato.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Aggiungi la prima uscita!", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 100.dp)
-                ) {
-                    items(uscite) { uscita ->
-                        UscitaCard(
-                            uscita = uscita,
-                            onClick = { navController.navigate("uscita/${gruppoId}?uscitaId=${uscita.id}") }
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                }
+                // --- LAYOUT VERTICALE CLASSICO (1 COLONNA SINGOLA) ---
+                SezioneHeaderGruppo(
+                    gruppo = gruppo!!,
+                    onStatisticheClick = { navController.navigate("statistiche/${gruppo!!.id}") },
+                    onInvitaClick = { scope.launch { sheetState.show() } },
+                    onModificaClick = { navController.navigate("modificaGruppo?gruppoId=${gruppo!!.id}") },
+                    onLasciaClick = { showLeaveDialog = true }
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                SezioneStoricoUscite(
+                    uscite = uscite,
+                    gruppoId = gruppoId,
+                    navController = navController,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
 
@@ -231,6 +179,7 @@ fun GruppoScreen(
         )
     }
 
+    // --- BOTTOM SHEET PER CONDIVISIONE INVITO ---
     if (sheetState.isVisible && gruppo != null) {
         ModalBottomSheet(
             onDismissRequest = {
@@ -347,6 +296,138 @@ fun GruppoScreen(
                 }
             }
         )
+    }
+}
+
+// ==========================================
+// COMPONENTI MODULARI PER IL LAYOUT ADATTIVO
+// ==========================================
+
+@Composable
+private fun SezioneHeaderGruppo(
+    gruppo: Gruppo,
+    onStatisticheClick: () -> Unit,
+    onInvitaClick: () -> Unit,
+    onModificaClick: () -> Unit,
+    onLasciaClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier
+                    .size(80.dp)
+                    .padding(top = 4.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    AvatarProvider.DisplayAvatar(
+                        avatar = AvatarProvider.getAvatar(gruppo.avatarIndex),
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = gruppo.nome,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Text(
+            text = "${gruppo.membriIds.size} componenti",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // BARRA AZIONI COMPATTA
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            IconButton(onClick = onStatisticheClick) {
+                Icon(Icons.Default.BarChart, "Statistiche", tint = MaterialTheme.colorScheme.tertiary)
+            }
+
+            IconButton(onClick = onInvitaClick) {
+                Icon(Icons.Default.Share, "Invita", tint = MaterialTheme.colorScheme.primary)
+            }
+
+            IconButton(onClick = onModificaClick) {
+                Icon(Icons.Default.Edit, "Modifica", tint = MaterialTheme.colorScheme.primary)
+            }
+
+            IconButton(onClick = onLasciaClick) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                    contentDescription = "Lascia Gruppo",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SezioneStoricoUscite(
+    uscite: List<Uscita>,
+    gruppoId: String,
+    navController: NavController,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = "Storico Uscite",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        if (uscite.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.DirectionsCar,
+                        contentDescription = null,
+                        modifier = Modifier.size(80.dp),
+                        tint = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Nessun viaggio registrato.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Aggiungi la prima uscita!", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 100.dp)
+            ) {
+                items(uscite) { uscita ->
+                    UscitaCard(
+                        uscita = uscita,
+                        onClick = { navController.navigate("uscita/${gruppoId}?uscitaId=${uscita.id}") }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
     }
 }
 

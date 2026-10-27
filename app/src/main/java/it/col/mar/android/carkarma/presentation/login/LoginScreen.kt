@@ -1,5 +1,6 @@
 package it.col.mar.android.carkarma.presentation.login
 
+import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -16,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -27,40 +29,101 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import it.col.mar.android.carkarma.R
 
-/**
- * Schermata di Login dell'applicazione CarKarma.
- * Gestisce l'accesso e la registrazione sia con credenziali classiche (Email/Password)
- * sia in modalità federata tramite Google OneTap.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     state: LoginState,
-    onSignInClick: () -> Unit, // Callback per il click sul tasto Google
-    viewModel: LoginViewModel = viewModel() // Iniettiamo il VM per chiamare le funzioni email
+    onSignInClick: () -> Unit,
+    viewModel: LoginViewModel = viewModel()
 ) {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
-    // Mostra errori (Toast) se qualcosa va storto (es. password errata o formato non valido)
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     LaunchedEffect(key1 = state.signInError) {
         state.signInError?.let { error ->
             Toast.makeText(context, error, Toast.LENGTH_LONG).show()
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState()), // Permette di scorrere il layout se la tastiera copre i campi di input
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
-        Spacer(modifier = Modifier.height(32.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            if (isLandscape) {
+                // --- LAYOUT TABLET ORIZZONTALE (2 COLONNE AFFIANCATE) ---
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(32.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // COLONNA SINISTRA: Logo e Branding
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        SezioneHeaderLogin()
+                    }
 
-        // --- LOGO E TITOLO ---
+                    // COLONNA DESTRA: Form di Login e Social Sign-In
+                    Column(
+                        modifier = Modifier.weight(1.2f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        SezioneFormLogin(
+                            email = email,
+                            onEmailChange = { email = it },
+                            password = password,
+                            onPasswordChange = { password = it },
+                            isLoading = state.isLoading,
+                            onSignUpClick = { viewModel.signUpWithEmail(email, password) },
+                            onSignInWithEmailClick = { viewModel.signInWithEmail(email, password) },
+                            onGoogleSignInClick = onSignInClick
+                        )
+                    }
+                }
+            } else {
+                // --- LAYOUT VERTICALE CLASSICO (1 COLONNA SINGOLA) ---
+                Spacer(modifier = Modifier.height(32.dp))
+
+                SezioneHeaderLogin()
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                SezioneFormLogin(
+                    email = email,
+                    onEmailChange = { email = it },
+                    password = password,
+                    onPasswordChange = { password = it },
+                    isLoading = state.isLoading,
+                    onSignUpClick = { viewModel.signUpWithEmail(email, password) },
+                    onSignInWithEmailClick = { viewModel.signInWithEmail(email, password) },
+                    onGoogleSignInClick = onSignInClick
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+    }
+}
+
+// ==========================================
+// COMPONENTI MODULARI PER IL LAYOUT ADATTIVO
+// ==========================================
+
+@Composable
+private fun SezioneHeaderLogin() {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(
             imageVector = Icons.Default.AccountCircle,
             contentDescription = null,
@@ -77,13 +140,24 @@ fun LoginScreen(
             color = MaterialTheme.colorScheme.primary,
             textAlign = TextAlign.Center
         )
+    }
+}
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // --- CAMPI EMAIL / PASSWORD ---
+@Composable
+private fun SezioneFormLogin(
+    email: String,
+    onEmailChange: (String) -> Unit,
+    password: String,
+    onPasswordChange: (String) -> Unit,
+    isLoading: Boolean,
+    onSignUpClick: () -> Unit,
+    onSignInWithEmailClick: () -> Unit,
+    onGoogleSignInClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         OutlinedTextField(
             value = email,
-            onValueChange = { email = it },
+            onValueChange = onEmailChange,
             label = { Text("Email") },
             leadingIcon = { Icon(Icons.Default.Email, null) },
             modifier = Modifier.fillMaxWidth(),
@@ -95,7 +169,7 @@ fun LoginScreen(
 
         OutlinedTextField(
             value = password,
-            onValueChange = { password = it },
+            onValueChange = onPasswordChange,
             label = { Text("Password") },
             leadingIcon = { Icon(Icons.Default.Lock, null) },
             modifier = Modifier.fillMaxWidth(),
@@ -106,8 +180,7 @@ fun LoginScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // --- BOTTONI AZIONE (O LOADING) ---
-        if (state.isLoading) {
+        if (isLoading) {
             CircularProgressIndicator()
         } else {
             Row(
@@ -115,24 +188,27 @@ fun LoginScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 OutlinedButton(
-                    onClick = { viewModel.signUpWithEmail(email, password) },
-                    modifier = Modifier.weight(1f).height(50.dp)
+                    onClick = onSignUpClick,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp)
                 ) {
                     Text("Registrati")
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Button(
-                    onClick = { viewModel.signInWithEmail(email, password) },
-                    modifier = Modifier.weight(1f).height(50.dp)
+                    onClick = onSignInWithEmailClick,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp)
                 ) {
                     Text("Accedi")
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // --- DIVISORE "OPPURE" ---
         Row(verticalAlignment = Alignment.CenterVertically) {
             HorizontalDivider(modifier = Modifier.weight(1f))
             Text(" oppure ", color = Color.Gray, modifier = Modifier.padding(horizontal = 8.dp))
@@ -141,21 +217,19 @@ fun LoginScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // --- BOTTONE GOOGLE STILE UFFICIALE ---
         Button(
-            onClick = onSignInClick,
+            onClick = onGoogleSignInClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color.White, // Sfondo Bianco classico Google
-                contentColor = Color.Black    // Testo Nero
+                containerColor = Color.White,
+                contentColor = Color.Black
             ),
-            border = BorderStroke(1.dp, Color.LightGray), // Bordino sottile di separazione per contrasto
+            border = BorderStroke(1.dp, Color.LightGray),
             elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Immagine vettoriale del logo Google ufficiale (ic_google_logo in drawables)
                 Image(
                     painter = painterResource(id = R.drawable.ic_google_logo),
                     contentDescription = "Google Logo",
@@ -170,7 +244,5 @@ fun LoginScreen(
                 )
             }
         }
-
-        Spacer(modifier = Modifier.height(32.dp))
     }
 }

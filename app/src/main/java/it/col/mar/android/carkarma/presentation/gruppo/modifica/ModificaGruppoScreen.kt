@@ -1,5 +1,6 @@
 package it.col.mar.android.carkarma.presentation.gruppo.modifica
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,9 +21,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import it.col.mar.android.carkarma.data.model.Amico
 import it.col.mar.android.carkarma.util.AvatarProvider
 
 @Composable
@@ -42,6 +45,7 @@ fun ModificaGruppoScreen(
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     val isEditing = gruppoId.isNotEmpty()
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     Column(
         modifier = Modifier
@@ -49,6 +53,7 @@ fun ModificaGruppoScreen(
             .padding(horizontal = 16.dp)
             .padding(bottom = 16.dp)
     ) {
+        // --- HEADER CON TASTO INDIETRO E ELIMINAZIONE ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -89,9 +94,125 @@ fun ModificaGruppoScreen(
             }
         }
 
+        if (isLandscape) {
+            // --- LAYOUT TABLET ORIZZONTALE (2 COLONNE AFFIANCATE) ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                // COLONNA SINISTRA: Info Gruppo, Icona e Azioni
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        SezioneDatiGruppo(
+                            nomeGruppo = nomeGruppo,
+                            onNomeGruppoChange = viewModel::onNomeGruppoChange,
+                            avatarIndex = avatarIndex,
+                            onAvatarSelected = viewModel::onAvatarSelected
+                        )
+                    }
+
+                    Column {
+                        SezionePulsantiAzione(
+                            nomeGruppo = nomeGruppo,
+                            onCreaAmico = { navController.navigate("amico?amicoId=&gruppoId=") },
+                            onSalvaGruppo = {
+                                viewModel.salvaGruppo { navController.popBackStack() }
+                            }
+                        )
+                    }
+                }
+
+                // COLONNA DESTRA: Lista Amici Selezionabili
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                ) {
+                    SezioneListaAmici(
+                        amiciDisponibili = amiciDisponibili,
+                        amiciSelezionati = amiciSelezionati,
+                        gruppoId = gruppoId,
+                        navController = navController,
+                        onToggleAmico = viewModel::toggleAmicoSelezionato,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        } else {
+            // --- LAYOUT VERTICALE CLASSICO (1 COLONNA SINGOLA) ---
+            SezioneDatiGruppo(
+                nomeGruppo = nomeGruppo,
+                onNomeGruppoChange = viewModel::onNomeGruppoChange,
+                avatarIndex = avatarIndex,
+                onAvatarSelected = viewModel::onAvatarSelected
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            SezioneListaAmici(
+                amiciDisponibili = amiciDisponibili,
+                amiciSelezionati = amiciSelezionati,
+                gruppoId = gruppoId,
+                navController = navController,
+                onToggleAmico = viewModel::toggleAmicoSelezionato,
+                modifier = Modifier.weight(1f)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SezionePulsantiAzione(
+                nomeGruppo = nomeGruppo,
+                onCreaAmico = { navController.navigate("amico?amicoId=&gruppoId=") },
+                onSalvaGruppo = {
+                    viewModel.salvaGruppo { navController.popBackStack() }
+                }
+            )
+        }
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Eliminare il gruppo?") },
+            text = { Text("Sei sicuro? Verranno eliminate anche tutte le uscite associate.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.eliminaGruppo {
+                            navController.navigate("home") { popUpTo("home") { inclusive = true } }
+                        }
+                        showDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Elimina") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Annulla") } }
+        )
+    }
+}
+
+// ==========================================
+// COMPONENTI MODULARI PER IL LAYOUT ADATTIVO
+// ==========================================
+
+@Composable
+private fun SezioneDatiGruppo(
+    nomeGruppo: String,
+    onNomeGruppoChange: (String) -> Unit,
+    avatarIndex: Int,
+    onAvatarSelected: (Int) -> Unit
+) {
+    Column {
         OutlinedTextField(
             value = nomeGruppo,
-            onValueChange = { viewModel.onNomeGruppoChange(it) },
+            onValueChange = onNomeGruppoChange,
             label = { Text("Nome Gruppo") },
             modifier = Modifier.fillMaxWidth()
         )
@@ -122,28 +243,41 @@ fun ModificaGruppoScreen(
                             color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                             shape = CircleShape
                         )
-                        .clickable { viewModel.onAvatarSelected(index) }
+                        .clickable { onAvatarSelected(index) }
                 ) {
                     AvatarProvider.DisplayAvatar(
                         avatar = avatar,
                         contentDescription = null,
                         tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(12.dp).size(32.dp)
+                        modifier = Modifier
+                            .padding(12.dp)
+                            .size(32.dp)
                     )
                 }
             }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(24.dp))
-
+@Composable
+private fun SezioneListaAmici(
+    amiciDisponibili: List<Amico>,
+    amiciSelezionati: Set<String>,
+    gruppoId: String,
+    navController: NavController,
+    onToggleAmico: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
         Text(
             text = "Seleziona Amici",
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(bottom = 8.dp)
         )
 
         LazyColumn(
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.fillMaxSize()
         ) {
             items(amiciDisponibili) { amico ->
                 Row(
@@ -151,20 +285,21 @@ fun ModificaGruppoScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp)
-                        .clickable { viewModel.toggleAmicoSelezionato(amico.id) }
+                        .clickable { onToggleAmico(amico.id) }
                 ) {
                     Checkbox(
                         checked = amiciSelezionati.contains(amico.id),
-                        onCheckedChange = { viewModel.toggleAmicoSelezionato(amico.id) }
+                        onCheckedChange = { onToggleAmico(amico.id) }
                     )
                     Text(
                         text = amico.nome,
                         style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(start = 8.dp).weight(1f)
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .weight(1f)
                     )
 
                     IconButton(onClick = {
-                        // Modifica amico passando SEMPRE stringhe vuote se i valori mancano
                         val gid = if (gruppoId.isEmpty()) "" else gruppoId
                         navController.navigate("amico?amicoId=${amico.id}&gruppoId=$gid")
                     }) {
@@ -173,12 +308,21 @@ fun ModificaGruppoScreen(
                 }
             }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(16.dp))
-
+@Composable
+private fun SezionePulsantiAzione(
+    nomeGruppo: String,
+    onCreaAmico: () -> Unit,
+    onSalvaGruppo: () -> Unit
+) {
+    Column {
         Button(
-            onClick = { navController.navigate("amico?amicoId=&gruppoId=") },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
+            onClick = onCreaAmico,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
         ) {
             Icon(Icons.Default.Add, contentDescription = null)
@@ -189,35 +333,13 @@ fun ModificaGruppoScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Button(
-            onClick = {
-                viewModel.salvaGruppo {
-                    navController.popBackStack()
-                }
-            },
+            onClick = onSalvaGruppo,
             enabled = nomeGruppo.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().height(50.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
         ) {
             Text("Salva Gruppo")
         }
-    }
-
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Eliminare il gruppo?") },
-            text = { Text("Sei sicuro? Verranno eliminate anche tutte le uscite associate.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.eliminaGruppo {
-                            navController.navigate("home") { popUpTo("home") { inclusive = true } }
-                        }
-                        showDeleteDialog = false
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { Text("Elimina") }
-            },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Annulla") } }
-        )
     }
 }
